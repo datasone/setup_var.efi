@@ -1,12 +1,12 @@
 # UEFI Command Line Tool for Reading/Writing UEFI Variables
 This tool is a rewritten version of the [modded grub with setup_var commands](https://github.com/datasone/grub-mod-setup_var), enhanced with much cleaner code, aarch64 support and ability to be automated. The tool is able to read/write UEFI variables, and is usually used for changing BIOS settings which are hidden from UI.
 
-⚠ Use this tool with exetreme caution as accessing wrong varstore or variable may completely brick your computer!
+⚠ Use this tool with extreme caution as accessing wrong varstore or variable may completely brick your computer!
 
 Note: If you have been using the modded grub tool, you may want to refer to [the cheatsheet](#grub-cheatsheet).
 
 ## Term definitions
-The legacy names used in grub version of the tool and some other related tools (e.g. IFR extractor) used *varstore* and *variable*. The former word is not used in UEFI specification, and is actually the **variable** in UEFI runtime services (sometimes referred as "variable store", which is possibly where "varstore" came from). So to clarify this, this project use "variable" and "value":
+The legacy names used in grub version of the tool and some other related tools (e.g. IFR extractor) used *varstore* and *variable*. The former word is not used in UEFI specification, and is actually the **variable** in UEFI runtime services (sometimes referred to as "variable store", which is possibly where "varstore" came from). So to clarify this, this project uses "variable" and "value":
 - **Variable** is the former *varstore*, which means a named storage with varying size from several to several thousands of bytes. Maybe used for storing many values of many BIOS setting items.
 - **Value** is the former *variable*, which represents a value in the variable with few (often one to two) bytes, referred with variable and offset. While changing BIOS settings, this means the value of *one* BIOS setting item.
 

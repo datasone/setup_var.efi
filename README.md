@@ -51,4 +51,4 @@ Install nightly rust as it's required by `uefi-rs`, and
 cargo build --target x86_64-unknown-uefi [--release]
 ```
 
-Use `aarch64-unknoen-uefi` for aarch64 target.
+Use `aarch64-unknown-uefi` for aarch64 target.

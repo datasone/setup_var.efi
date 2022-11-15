@@ -32,7 +32,7 @@ Example: .\setup_var.efi 0x10E 0x1a -n CpuSetup
 For changing BIOS settings, you may use those following steps to obtain the variable name and value offset:
 1. Obtain (raw) BIOS image, some motherboard OEMs provides BIOS image that can be directly opened but it's not commonly the case for branded PCs. For Intel CPU-based systems, you may use **Flash Programming Tool** from CSME System Tools to directly extract raw BIOS image.
 2. Use [UEFITool](https://github.com/LongSoft/UEFITool) to open the BIOS image, and find `Setup` as string, there would be image sections named "Setup/*", navigate to that and extract body of the `Setup` folder to a file.
-3. Use [IFR-Extractor](https://github.com/LongSoft/IFRExtractor-RS) to export setup info to a text file.
+3. Use [IFR-Extractor](https://github.com/LongSoft/Universal-IFR-Extractor) to export setup info to a text file.
 4. Find your desired setting in the text file, note the offset after `VarStoreInfo (VarOffset/VarName):` and the id after `VarStore:`.
 5. Search for `VarStoreId: {id}`, where `{id}` is the id found earlier. And note the `Name` after it.
 6. Change the value using noted variable(varstore) name, offset, and size.

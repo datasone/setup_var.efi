@@ -195,7 +195,7 @@ fn parse_args_from_str(options: &CStr16) -> Result<Args, ParseError> {
                 }
                 VariableId(id) => {
                     if args.var_id.is_none() {
-                        args.val_size = Some(id)
+                        args.var_id = Some(id)
                     } else {
                         return Err(AppliedMultipleTimes(option.to_string()));
                     }

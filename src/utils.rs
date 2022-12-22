@@ -29,11 +29,7 @@ impl Display for UEFIVarError {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         match self {
             Self::EnumVars(st) => {
-                write!(
-                    f,
-                    "Error while enumerating UEFI variables with code {:?}",
-                    st
-                )
+                write!(f, "Error while enumerating UEFI variables with code {st:?}")
             }
             Self::NoCorrespondingVar => {
                 write!(f, "No variable with specified name found")
@@ -45,34 +41,31 @@ impl Display for UEFIVarError {
                 )
             }
             Self::InvalidVarName(e) => {
-                write!(f, "Unexpected invalid UEFI variable name obtained: {:?}", e)
+                write!(f, "Unexpected invalid UEFI variable name obtained: {e:?}")
             }
             Self::GetVariableSize(s, st) => {
                 write!(
                     f,
-                    "Error while getting size of variable {s} with code {:?}",
-                    st
+                    "Error while getting size of variable {s} with code {st:?}"
                 )
             }
             Self::GetVariable(s, st) => {
                 write!(
                     f,
-                    "Error while getting content of variable {s} with code {:?}",
-                    st
+                    "Error while getting content of variable {s} with code {st:?}",
                 )
             }
             Self::OffsetOverflow((offset, val_size), size) => {
                 write!(
                     f,
-                    "Specified offset 0x{:X} and value size 0x{:X} exceeds variable size 0x{:X}",
-                    offset, val_size, size
+                    "Specified offset 0x{offset:X} and value size 0x{val_size:X} exceeds variable \
+                     size 0x{size:X}"
                 )
             }
             Self::SetVariable(s, st) => {
                 write!(
                     f,
-                    "Error while setting content of variable {s} with code {:?}",
-                    st
+                    "Error while setting content of variable {s} with code {st:?}"
                 )
             }
         }

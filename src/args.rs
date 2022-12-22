@@ -35,7 +35,7 @@ impl Display for ParseError {
                 write!(f, "Error while initializing UEFI LoadedImage protocol")
             }
             LoadOptionsError(e) => {
-                write!(f, "Error loading options: {:?}", e)
+                write!(f, "Error loading options: {e:?}")
             }
             InvalidValue(s) => {
                 write!(f, "Unexpected value: {s}")

@@ -40,7 +40,8 @@ fn main(_image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
                     return Status::ABORTED;
                 } else {
                     println!(
-                        "Written value in {var_name} at offset 0x{:X} with 0x{:X} bytes: 0x{:0width$X}",
+                        "Written value in {var_name} at offset 0x{:X} with 0x{:X} bytes: \
+                         0x{:0width$X}",
                         offset,
                         val_size,
                         value,

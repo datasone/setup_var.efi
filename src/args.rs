@@ -219,9 +219,9 @@ fn parse_args_from_str(options: &CStr16) -> Result<Args, ParseError> {
 }
 
 fn starts_with(s: &CStr16, c: char) -> bool {
-    match s.to_u16_slice().first() {
+    match s.as_slice_with_nul().first() {
         None => false,
-        Some(&c_h) => c_h == c as u16,
+        Some(&c_h) => c_h == c.try_into().unwrap(),
     }
 }
 

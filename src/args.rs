@@ -159,20 +159,56 @@ pub(crate) fn parse_args(boot_services: &BootServices) -> Result<Args, ParseErro
     parse_args_from_str(options)
 }
 
+fn drop_first_arg(arg: &CStr16) -> bool {
+    let rev_efi_ext: [Char16; 5] = [
+        '.'.try_into().unwrap(),
+        'e'.try_into().unwrap(),
+        'f'.try_into().unwrap(),
+        'i'.try_into().unwrap(),
+        '\0'.try_into().unwrap(),
+    ];
+    let arg_chars = arg.as_slice_with_nul();
+    let has_efi_ext = if arg_chars.len() < 5 {
+        false
+    } else {
+        let arg_last_chars = &arg_chars[arg_chars.len() - 5..arg_chars.len()];
+        arg_last_chars == rev_efi_ext
+    };
+
+    #[allow(clippy::needless_bool)]
+    if has_efi_ext {
+        true // efi extension, treated as the name of the executable file
+    } else if starts_with(arg, '-') || parse_number(arg).is_ok() {
+        false // Highly probably an option
+    } else {
+        true // We can't decide what is the first arg, defaults to drop it
+    }
+}
+
 fn parse_args_from_str(options: &CStr16) -> Result<Args, ParseError> {
     let options = split_cstr16(options, ' '.try_into().unwrap());
+    let opt_len = options.len();
 
-    if options.len() == 1 {
+    if opt_len == 0 {
         return Ok(Args {
             help_msg: true,
             ..Default::default()
         });
     }
 
-    let mut args = Args::default();
-
+    let first_arg = options[0].clone();
     let mut option_iter = options.into_iter();
-    option_iter.next(); // Skips executable argv
+    if drop_first_arg(&first_arg) {
+        if opt_len == 1 {
+            return Ok(Args {
+                help_msg: true,
+                ..Default::default()
+            });
+        }
+        option_iter.next(); // Skips executable argv
+    }
+
+    let mut args = Args::default();
     while let Some(option) = option_iter.next() {
         if option.as_slice_with_nul().len() == 1 {
             continue; // empty string
@@ -525,6 +561,54 @@ pub(crate) fn test_functions() {
         ParseError::AppliedMultipleTimes("-n".to_owned()),
         parse_args_from_str(
             &CString16::try_from(".\\setup_var.efi 0x12 0x12e -n VAR -n VAR1").unwrap()
+        )
+    );
+    println!(
+        r#"parse_args_from_str("0x01 -n VAR -h --write_on_demand"), w/o exe name, should be Ok({:?}), result is {:?}"#,
+        Args {
+            offset: Some(0x1),
+            help_msg: true,
+            var_name: Some(CString16::try_from("VAR").unwrap()),
+            write_on_demand: true,
+            ..Default::default()
+        },
+        parse_args_from_str(&CString16::try_from("0x01 -n VAR -h --write_on_demand").unwrap())
+    );
+    println!(
+        r#"parse_args_from_str("-s 0x01 -n VAR -h --write_on_demand"), w/o exe name, should be Ok({:?}), result is {:?}"#,
+        Args {
+            help_msg: true,
+            var_name: Some(CString16::try_from("VAR").unwrap()),
+            val_size: Some(0x1),
+            write_on_demand: true,
+            ..Default::default()
+        },
+        parse_args_from_str(&CString16::try_from("-s 0x01 -n VAR -h --write_on_demand").unwrap())
+    );
+    println!(
+        r#"parse_args_from_str("-s 0x01 -n VAR -h --write_on_demand"), w/ ambiguous exe name, should be Ok({:?}), result is {:?}"#,
+        Args {
+            help_msg: true,
+            var_name: Some(CString16::try_from("VAR").unwrap()),
+            val_size: Some(0x1),
+            write_on_demand: true,
+            ..Default::default()
+        },
+        parse_args_from_str(
+            &CString16::try_from("0x14.efi -s 0x01 -n VAR -h --write_on_demand").unwrap()
+        )
+    );
+    println!(
+        r#"parse_args_from_str("-s 0x01 -n VAR -h --write_on_demand"), w/ambiguous exe name, should be Ok({:?}), result is {:?}"#,
+        Args {
+            help_msg: true,
+            var_name: Some(CString16::try_from("VAR").unwrap()),
+            val_size: Some(0x1),
+            write_on_demand: true,
+            ..Default::default()
+        },
+        parse_args_from_str(
+            &CString16::try_from("-s.efi -s 0x01 -n VAR -h --write_on_demand").unwrap()
         )
     );
 }

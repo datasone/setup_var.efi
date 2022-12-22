@@ -35,6 +35,7 @@ fn main(_image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
                     offset,
                     value,
                     val_size,
+                    args.write_on_demand,
                 ) {
                     println!("Error writing variable:\n{e}");
                     return Status::ABORTED;

@@ -140,6 +140,7 @@ pub(crate) fn write_val(
     offset: usize,
     value: usize,
     val_size: usize,
+    write_on_demand: bool,
 ) -> Result<(), UEFIVarError> {
     let mut var = read_var(runtime_services, var_name, var_id)?;
     if offset + val_size > var.content.len() {
@@ -151,13 +152,18 @@ pub(crate) fn write_val(
 
     let value = UEFIValue::from_usize(value, val_size);
     let slice = &mut var.content[offset..offset + val_size];
-    slice.copy_from_slice(&value.0);
 
-    runtime_services
-        .set_variable(&var.name, &var.vendor, var.attributes, &var.content)
-        .map_err(|e| UEFIVarError::SetVariable(var.name.to_string(), e.status()))?;
+    if write_on_demand && slice == value.0 {
+        Ok(())
+    } else {
+        slice.copy_from_slice(&value.0);
 
-    Ok(())
+        runtime_services
+            .set_variable(&var.name, &var.vendor, var.attributes, &var.content)
+            .map_err(|e| UEFIVarError::SetVariable(var.name.to_string(), e.status()))?;
+
+        Ok(())
+    }
 }
 
 fn read_var(

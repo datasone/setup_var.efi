@@ -58,12 +58,13 @@ impl Display for ParseError {
 
 #[derive(Debug, Default)]
 pub(crate) struct Args {
-    pub(crate) help_msg: bool,
-    pub(crate) offset:   Option<usize>,
-    pub(crate) value:    Option<usize>,
-    pub(crate) val_size: Option<usize>,
-    pub(crate) var_name: Option<CString16>,
-    pub(crate) var_id:   Option<usize>,
+    pub(crate) help_msg:        bool,
+    pub(crate) offset:          Option<usize>,
+    pub(crate) value:           Option<usize>,
+    pub(crate) val_size:        Option<usize>,
+    pub(crate) var_name:        Option<CString16>,
+    pub(crate) var_id:          Option<usize>,
+    pub(crate) write_on_demand: bool,
 }
 
 impl Args {
@@ -126,16 +127,18 @@ enum NamedArg {
     CustomName(CString16),
     VariableId(usize),
     Help,
+    WriteOnDemand,
 }
 
 pub(crate) const HELP_MSG: &str = r#"Usage:
-setup_var.efi <OFFSET> [<VALUE>] [-s <VALUE_SIZE>] [-n <VAR_NAME>] [-i <VAR_ID>]
+setup_var.efi <OFFSET> [<VALUE>] [-s <VALUE_SIZE>] [-n <VAR_NAME>] [-i <VAR_ID>] [--write_on_demand]
 
 OFFSET: The offset of value to be altered in the UEFI variable.
 VALUE: The new value to write, capped at 64-bit. If not specified, the value at OFFSET will be read and shown.
 VALUE_SIZE: Bytes of value to write, must be equal or larger than the size of <VALUE>, defaults to 0x1.
 VAR_NAME: The name of UEFI variable to be altered, defaults to "Setup".
 VAR_ID: Unique id for distinguishing variables with same name, which will be provided by setup_var.efi (when required).
+write_on_demand: If the value desired to be written is the same with storage, skip the unnecessary write.
 
 OFFSET, VALUE, VALUE_SIZE and VAR_ID are numbers, and must be specified in hexadecimal with prefix "0x".
 
@@ -178,6 +181,9 @@ fn parse_args_from_str(options: &CStr16) -> Result<Args, ParseError> {
             match parse_named_arg(&option, &mut option_iter)? {
                 Help => {
                     args.help_msg = true;
+                }
+                WriteOnDemand => {
+                    args.write_on_demand = true;
                 }
                 CustomName(name) => {
                     if args.var_name.is_none() {
@@ -360,6 +366,13 @@ pub(crate) fn test_functions() {
             &mut core::iter::empty::<CString16>()
         )
     );
+    println!(
+        r#"parse_named_arg("--write_on_demand", None), should be Ok({:?}), result is {:?}"#,
+        NamedArg::WriteOnDemand,
+        parse_named_arg(
+            &CString16::try_from("--write_on_demand").unwrap(),
+            &mut core::iter::empty::<CString16>()
+        )
     );
     println!(
         r#"parse_named_arg("--help", Some("abc")), should be Ok({:?}), result is {:?}"#,
@@ -466,15 +479,18 @@ pub(crate) fn test_functions() {
         parse_args_from_str(&CString16::try_from(".\\setup_var.efi 0x12 -n -h").unwrap())
     );
     println!(
-        r#"parse_args_from_str("0x12 0x12 -n VAR -h"), should be Ok({:?}), result is {:?}"#,
+        r#"parse_args_from_str("0x12 0x12 --write_on_demand -n VAR -h"), should be Ok({:?}), result is {:?}"#,
         Args {
             help_msg: true,
             var_name: Some(CString16::try_from("VAR").unwrap()),
             offset: Some(0x12),
             value: Some(0x12),
+            write_on_demand: true,
             ..Default::default()
         },
-        parse_args_from_str(&CString16::try_from(".\\setup_var.efi 0x12 0x12 -n VAR -h").unwrap())
+        parse_args_from_str(
+            &CString16::try_from(".\\setup_var.efi 0x12 0x12 --write_on_demand -n VAR -h").unwrap()
+        )
     );
     println!(
         r#"parse_args_from_str("0x12 0x12e -n VAR"), should be Err({:?}), result is {:?}"#,
@@ -492,14 +508,17 @@ pub(crate) fn test_functions() {
         parse_args_from_str(&CString16::try_from(".\\setup_var.efi -s 0x01 -n VAR").unwrap())
     );
     println!(
-        r#"parse_args_from_str("-s 0x01 -n VAR -h"), should be Ok({:?}), result is {:?}"#,
+        r#"parse_args_from_str("-s 0x01 -n VAR -h --write_on_demand"), should be Ok({:?}), result is {:?}"#,
         Args {
             help_msg: true,
             var_name: Some(CString16::try_from("VAR").unwrap()),
             val_size: Some(0x1),
+            write_on_demand: true,
             ..Default::default()
         },
-        parse_args_from_str(&CString16::try_from(".\\setup_var.efi -s 0x01 -n VAR -h").unwrap())
+        parse_args_from_str(
+            &CString16::try_from(".\\setup_var.efi -s 0x01 -n VAR -h --write_on_demand").unwrap()
+        )
     );
     println!(
         r#"parse_args_from_str("0x12 0x12e -n VAR -n VAR1"), should be Err({:?}), result is {:?}"#,

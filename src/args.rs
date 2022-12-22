@@ -175,7 +175,7 @@ fn parse_args_from_str(options: &CStr16) -> Result<Args, ParseError> {
             continue; // empty string
         }
         if starts_with(&option, '-') {
-            match parse_named_arg(&option, option_iter.next().as_deref())? {
+            match parse_named_arg(&option, &mut option_iter)? {
                 Help => {
                     args.help_msg = true;
                 }
@@ -258,8 +258,18 @@ fn parse_number(num_str: &CStr16) -> Result<usize, ParseError> {
     Ok(value)
 }
 
-fn parse_named_arg(key: &CStr16, value: Option<&CStr16>) -> Result<NamedArg, ParseError> {
-    let value = value.ok_or_else(|| OptionNoValue(key.to_string()));
+fn parse_named_arg(
+    key: &CStr16,
+    opts: &mut impl Iterator<Item = CString16>,
+) -> Result<NamedArg, ParseError> {
+    if key.eq_str_until_nul(&"-h") || key.eq_str_until_nul(&"--help") {
+        return Ok(Help);
+    } else if key.eq_str_until_nul(&"--write_on_demand") {
+        return Ok(WriteOnDemand);
+    }
+
+    let value = opts.next();
+    let value = value.as_ref().ok_or_else(|| OptionNoValue(key.to_string()));
 
     if key.eq_str_until_nul(&"-s") {
         Ok(ValueSize(parse_number(value?)?))
@@ -267,8 +277,6 @@ fn parse_named_arg(key: &CStr16, value: Option<&CStr16>) -> Result<NamedArg, Par
         Ok(CustomName(cstr16_to_cstring16(value?)))
     } else if key.eq_str_until_nul(&"-i") {
         Ok(VariableId(parse_number(value?)?))
-    } else if key.eq_str_until_nul(&"-h") || key.eq_str_until_nul(&"--help") {
-        Ok(Help)
     } else {
         Err(InvalidValue(key.to_string()))
     }
@@ -347,14 +355,18 @@ pub(crate) fn test_functions() {
     println!(
         r#"parse_named_arg("-h", None), should be Ok({:?}), result is {:?}"#,
         NamedArg::Help,
-        parse_named_arg(&CString16::try_from("-h").unwrap(), None)
+        parse_named_arg(
+            &CString16::try_from("-h").unwrap(),
+            &mut core::iter::empty::<CString16>()
+        )
+    );
     );
     println!(
         r#"parse_named_arg("--help", Some("abc")), should be Ok({:?}), result is {:?}"#,
         NamedArg::Help,
         parse_named_arg(
             &CString16::try_from("--help").unwrap(),
-            Some(&CString16::try_from("abc").unwrap())
+            &mut [CString16::try_from("abc").unwrap()].into_iter()
         )
     );
     println!(
@@ -362,7 +374,7 @@ pub(crate) fn test_functions() {
         NamedArg::ValueSize(0x12e),
         parse_named_arg(
             &CString16::try_from("-s").unwrap(),
-            Some(&CString16::try_from("0x12e").unwrap())
+            &mut [CString16::try_from("0x12e").unwrap()].into_iter()
         )
     );
     println!(
@@ -370,7 +382,7 @@ pub(crate) fn test_functions() {
         ParseError::InvalidValue("CpuSetup".to_owned()),
         parse_named_arg(
             &CString16::try_from("-s").unwrap(),
-            Some(&CString16::try_from("CpuSetup").unwrap())
+            &mut [CString16::try_from("CpuSetup").unwrap()].into_iter()
         )
     );
     println!(
@@ -378,7 +390,7 @@ pub(crate) fn test_functions() {
         NamedArg::VariableId(0x1),
         parse_named_arg(
             &CString16::try_from("-i").unwrap(),
-            Some(&CString16::try_from("0x1").unwrap())
+            &mut [CString16::try_from("0x1").unwrap()].into_iter()
         )
     );
     println!(
@@ -386,7 +398,7 @@ pub(crate) fn test_functions() {
         ParseError::InvalidValue("CpuSetup".to_owned()),
         parse_named_arg(
             &CString16::try_from("-i").unwrap(),
-            Some(&CString16::try_from("CpuSetup").unwrap())
+            &mut [CString16::try_from("CpuSetup").unwrap()].into_iter()
         )
     );
     println!(
@@ -394,7 +406,7 @@ pub(crate) fn test_functions() {
         NamedArg::CustomName(CString16::try_from("CpuSetup").unwrap()),
         parse_named_arg(
             &CString16::try_from("-n").unwrap(),
-            Some(&CString16::try_from("CpuSetup").unwrap())
+            &mut [CString16::try_from("CpuSetup").unwrap()].into_iter()
         )
     );
     println!(
@@ -402,13 +414,16 @@ pub(crate) fn test_functions() {
         ParseError::InvalidValue("0x13".to_owned()),
         parse_named_arg(
             &CString16::try_from("0x13").unwrap(),
-            Some(&CString16::try_from("CpuSetup").unwrap())
+            &mut [CString16::try_from("CpuSetup").unwrap()].into_iter()
         )
     );
     println!(
         r#"parse_named_arg("-n", None), should be Err({:?}), result is {:?}"#,
         ParseError::OptionNoValue("-n".to_owned()),
-        parse_named_arg(&CString16::try_from("-n").unwrap(), None)
+        parse_named_arg(
+            &CString16::try_from("-n").unwrap(),
+            &mut core::iter::empty::<CString16>()
+        )
     );
 
     println!("Testing parse_args_from_str");

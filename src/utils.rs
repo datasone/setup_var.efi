@@ -133,6 +133,11 @@ pub(crate) fn read_val(
     Ok(UEFIValue(slice.to_vec()))
 }
 
+pub enum WriteStatus {
+    Normal,
+    Skipped,
+}
+
 pub(crate) fn write_val(
     runtime_services: &RuntimeServices,
     var_name: &CStr16,
@@ -141,7 +146,7 @@ pub(crate) fn write_val(
     value: usize,
     val_size: usize,
     write_on_demand: bool,
-) -> Result<(), UEFIVarError> {
+) -> Result<WriteStatus, UEFIVarError> {
     let mut var = read_var(runtime_services, var_name, var_id)?;
     if offset + val_size > var.content.len() {
         return Err(UEFIVarError::OffsetOverflow(
@@ -154,7 +159,7 @@ pub(crate) fn write_val(
     let slice = &mut var.content[offset..offset + val_size];
 
     if write_on_demand && slice == value.0 {
-        Ok(())
+        Ok(WriteStatus::Skipped)
     } else {
         slice.copy_from_slice(&value.0);
 
@@ -162,7 +167,7 @@ pub(crate) fn write_val(
             .set_variable(&var.name, &var.vendor, var.attributes, &var.content)
             .map_err(|e| UEFIVarError::SetVariable(var.name.to_string(), e.status()))?;
 
-        Ok(())
+        Ok(WriteStatus::Normal)
     }
 }
 

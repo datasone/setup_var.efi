@@ -9,6 +9,7 @@ mod utils;
 
 use uefi::prelude::*;
 use uefi_services::println;
+use utils::WriteStatus;
 
 use crate::args::HELP_MSG;
 
@@ -28,7 +29,7 @@ fn main(_image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
             let offset = args.offset.unwrap(); // It's checked in args::parse_args
 
             if let Some(value) = args.value {
-                if let Err(e) = utils::write_val(
+                match utils::write_val(
                     system_table.runtime_services(),
                     &var_name,
                     args.var_id,
@@ -37,17 +38,30 @@ fn main(_image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
                     val_size,
                     args.write_on_demand,
                 ) {
-                    println!("Error writing variable:\n{e}");
-                    return Status::ABORTED;
-                } else {
-                    println!(
-                        "Written value in {var_name} at offset 0x{:X} with 0x{:X} bytes: \
-                         0x{:0width$X}",
-                        offset,
-                        val_size,
-                        value,
-                        width = val_size * 2
-                    )
+                    Err(e) => {
+                        println!("Error writing variable:\n{e}");
+                        return Status::ABORTED;
+                    }
+                    Ok(WriteStatus::Normal) => {
+                        println!(
+                            "Written value in {var_name} at offset 0x{:X} with 0x{:X} bytes: \
+                             0x{:0width$X}",
+                            offset,
+                            val_size,
+                            value,
+                            width = val_size * 2
+                        )
+                    }
+                    Ok(WriteStatus::Skipped) => {
+                        println!(
+                            "Skipped written value in {var_name} at offset 0x{:X} with 0x{:X} \
+                             bytes: The value is already 0x{:0width$X}",
+                            offset,
+                            val_size,
+                            value,
+                            width = val_size * 2
+                        )
+                    }
                 }
             } else {
                 match utils::read_val(

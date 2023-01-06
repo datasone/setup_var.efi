@@ -65,6 +65,7 @@ pub(crate) struct Args {
     pub(crate) var_name:        Option<CString16>,
     pub(crate) var_id:          Option<usize>,
     pub(crate) write_on_demand: bool,
+    pub(crate) reboot:          bool,
 }
 
 impl Args {
@@ -127,18 +128,20 @@ enum NamedArg {
     CustomName(CString16),
     VariableId(usize),
     Help,
+    Reboot,
     WriteOnDemand,
 }
 
 pub(crate) const HELP_MSG: &str = r#"Usage:
-setup_var.efi <OFFSET> [<VALUE>] [-s <VALUE_SIZE>] [-n <VAR_NAME>] [-i <VAR_ID>] [--write_on_demand]
+setup_var.efi <OFFSET> [<VALUE>] [-s <VALUE_SIZE>] [-n <VAR_NAME>] [-i <VAR_ID>] [-r/--reboot] [--write_on_demand]
 
 OFFSET: The offset of value to be altered in the UEFI variable.
 VALUE: The new value to write, capped at 64-bit. If not specified, the value at OFFSET will be read and shown.
 VALUE_SIZE: Bytes of value to write, must be equal or larger than the size of <VALUE>, defaults to 0x1.
 VAR_NAME: The name of UEFI variable to be altered, defaults to "Setup".
 VAR_ID: Unique id for distinguishing variables with same name, which will be provided by setup_var.efi (when required).
-write_on_demand: If the value desired to be written is the same with storage, skip the unnecessary write.
+-r or --reboot: Reboot (warm reset) the computer after the program successfully finishes.
+--write_on_demand: If the value desired to be written is the same with storage, skip the unnecessary write.
 
 OFFSET, VALUE, VALUE_SIZE and VAR_ID are numbers, and must be specified in hexadecimal with prefix "0x".
 
@@ -217,6 +220,9 @@ fn parse_args_from_str(options: &CStr16) -> Result<Args, ParseError> {
             match parse_named_arg(&option, &mut option_iter)? {
                 Help => {
                     args.help_msg = true;
+                }
+                Reboot => {
+                    args.reboot = true;
                 }
                 WriteOnDemand => {
                     args.write_on_demand = true;
@@ -306,6 +312,8 @@ fn parse_named_arg(
 ) -> Result<NamedArg, ParseError> {
     if key.eq_str_until_nul(&"-h") || key.eq_str_until_nul(&"--help") {
         return Ok(Help);
+    } else if key.eq_str_until_nul(&"-r") || key.eq_str_until_nul(&"--reboot") {
+        return Ok(Reboot);
     } else if key.eq_str_until_nul(&"--write_on_demand") {
         return Ok(WriteOnDemand);
     }
@@ -399,6 +407,22 @@ pub(crate) fn test_functions() {
         NamedArg::Help,
         parse_named_arg(
             &CString16::try_from("-h").unwrap(),
+            &mut core::iter::empty::<CString16>()
+        )
+    );
+    println!(
+        r#"parse_named_arg("-r", None), should be Ok({:?}), result is {:?}"#,
+        NamedArg::Reboot,
+        parse_named_arg(
+            &CString16::try_from("-r").unwrap(),
+            &mut core::iter::empty::<CString16>()
+        )
+    );
+    println!(
+        r#"parse_named_arg("--reboot", None), should be Ok({:?}), result is {:?}"#,
+        NamedArg::Reboot,
+        parse_named_arg(
+            &CString16::try_from("--reboot").unwrap(),
             &mut core::iter::empty::<CString16>()
         )
     );

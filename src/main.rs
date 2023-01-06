@@ -7,7 +7,7 @@ extern crate alloc;
 mod args;
 mod utils;
 
-use uefi::prelude::*;
+use uefi::{prelude::*, table::runtime::ResetType};
 use uefi_services::println;
 use utils::WriteStatus;
 
@@ -82,6 +82,12 @@ fn main(_image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
                         return Status::ABORTED;
                     }
                 }
+            }
+
+            if args.reboot {
+                system_table
+                    .runtime_services()
+                    .reset(ResetType::Warm, Status::SUCCESS, None)
             }
         }
         Err(e) => {

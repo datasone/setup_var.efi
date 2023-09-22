@@ -149,22 +149,26 @@ impl From<ArgsError> for ParseError {
 }
 
 pub const HELP_MSG: &str = r#"Usage:
-setup_var.efi <OFFSET> [<VALUE>] [-s <VALUE_SIZE>] [-n <VAR_NAME>] [-i <VAR_ID>] [-r/--reboot] [--write_on_demand]
+setup_var.efi [-h/--help] [-r/--reboot] [--write_on_demand] VALUE_ARG...
 
-OFFSET: The offset of value to be altered in the UEFI variable.
-VALUE: The new value to write, capped at 64-bit. If not specified, the value at OFFSET will be read and shown.
-VALUE_SIZE: Bytes of value to write, must be equal or larger than the size of <VALUE>, defaults to 0x1.
-VAR_NAME: The name of UEFI variable to be altered, defaults to "Setup".
-VAR_ID: Unique id for distinguishing variables with same name, which will be provided by setup_var.efi (when required).
 -r or --reboot: Reboot (warm reset) the computer after the program successfully finishes.
 --write_on_demand: If the value desired to be written is the same with storage, skip the unnecessary write.
 
-OFFSET, VALUE, VALUE_SIZE and VAR_ID are numbers, and must be specified in hexadecimal with prefix "0x".
+VALUE_ARG represents the value needs to be read/written, and can be specified multiple times.
+The format of VALUE_ARG is: <VAR_NAME>[(VAR_ID)]:<OFFSET>[(VALUE_SIZE)][=VALUE]
+
+VAR_NAME: The name of UEFI variable to be altered, defaults to "Setup".
+VAR_ID: Unique id for distinguishing variables with same name, which will be provided by setup_var.efi (when required).
+OFFSET: The offset of value to be altered in the UEFI variable.
+VALUE: The new value to write, capped at 64-bit. If not specified, the value at OFFSET will be read and shown.
+VALUE_SIZE: Bytes of value to write, must be equal or larger than the size of <VALUE>, defaults to 1.
+
+OFFSET, VALUE, VALUE_SIZE and VAR_ID are numbers, and can be specified in hexadecimal with prefix "0x", or decimal with no prefixes.
 
 The program defaults to little endian for values ONLY while operating UEFI variables,
 though it's recommended to only operate on one byte if you are not sure what this is or means.
 
-Example: .\setup_var.efi 0x10E 0x1a -n CpuSetup"#;
+Example: .\setup_var.efi -r CpuSetup:0x10E=0x1A"#;
 
 pub fn parse_args(boot_services: &BootServices) -> Result<Args, ParseError> {
     let loaded_image = boot_services

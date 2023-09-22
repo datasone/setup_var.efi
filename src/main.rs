@@ -1,6 +1,5 @@
 #![no_main]
 #![no_std]
-#![feature(abi_efiapi)]
 
 extern crate alloc;
 
@@ -87,7 +86,7 @@ fn main(_image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
             if args.reboot {
                 system_table
                     .runtime_services()
-                    .reset(ResetType::Warm, Status::SUCCESS, None)
+                    .reset(ResetType::WARM, Status::SUCCESS, None)
             }
         }
         Err(e) => {

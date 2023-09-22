@@ -12,13 +12,11 @@ use uefi::{
     CStr16, CString16, Char16,
 };
 use uefi_services::println;
-use NamedArg::*;
-use ParseError::*;
 
 use crate::utils::cstr16_to_cstring16;
 
 #[derive(Debug)]
-pub(crate) enum ParseError {
+pub enum ParseError {
     LoadedImageProtocolError,
     LoadOptionsError(LoadOptionsError),
     InvalidValue(String),
@@ -31,25 +29,25 @@ pub(crate) enum ParseError {
 impl Display for ParseError {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         match self {
-            LoadedImageProtocolError => {
+            Self::LoadedImageProtocolError => {
                 write!(f, "Error while initializing UEFI LoadedImage protocol")
             }
-            LoadOptionsError(e) => {
+            Self::LoadOptionsError(e) => {
                 write!(f, "Error loading options: {e:?}")
             }
-            InvalidValue(s) => {
+            Self::InvalidValue(s) => {
                 write!(f, "Unexpected value: {s}")
             }
-            NumberTooLarge(s) => {
+            Self::NumberTooLarge(s) => {
                 write!(f, "Specified number {s} is too large (larger than 64-bit)")
             }
-            AppliedMultipleTimes(s) => {
+            Self::AppliedMultipleTimes(s) => {
                 write!(f, "Argument {s} is applied multiple times, once expected")
             }
-            OptionNoValue(s) => {
+            Self::OptionNoValue(s) => {
                 write!(f, "Argument {s} has no value specified")
             }
-            InvalidArgs(e) => {
+            Self::InvalidArgs(e) => {
                 write!(f, "{e}")
             }
         }
@@ -57,15 +55,15 @@ impl Display for ParseError {
 }
 
 #[derive(Debug, Default)]
-pub(crate) struct Args {
-    pub(crate) help_msg:        bool,
-    pub(crate) offset:          Option<usize>,
-    pub(crate) value:           Option<usize>,
-    pub(crate) val_size:        Option<usize>,
-    pub(crate) var_name:        Option<CString16>,
-    pub(crate) var_id:          Option<usize>,
-    pub(crate) write_on_demand: bool,
-    pub(crate) reboot:          bool,
+pub struct Args {
+    pub help_msg:        bool,
+    pub offset:          Option<usize>,
+    pub value:           Option<usize>,
+    pub val_size:        Option<usize>,
+    pub var_name:        Option<CString16>,
+    pub var_id:          Option<usize>,
+    pub write_on_demand: bool,
+    pub reboot:          bool,
 }
 
 impl Args {
@@ -92,8 +90,7 @@ impl Args {
 }
 
 #[derive(Debug)]
-pub(crate) enum ArgsError {
-    MissingOffset,
+pub enum ArgsError {
     ValLargerThanSize(usize, usize),
 }
 
@@ -132,7 +129,7 @@ enum NamedArg {
     WriteOnDemand,
 }
 
-pub(crate) const HELP_MSG: &str = r#"Usage:
+pub const HELP_MSG: &str = r#"Usage:
 setup_var.efi <OFFSET> [<VALUE>] [-s <VALUE_SIZE>] [-n <VAR_NAME>] [-i <VAR_ID>] [-r/--reboot] [--write_on_demand]
 
 OFFSET: The offset of value to be altered in the UEFI variable.
@@ -150,7 +147,7 @@ though it's recommended to only operate on one byte if you are not sure what thi
 
 Example: .\setup_var.efi 0x10E 0x1a -n CpuSetup"#;
 
-pub(crate) fn parse_args(boot_services: &BootServices) -> Result<Args, ParseError> {
+pub fn parse_args(boot_services: &BootServices) -> Result<Args, ParseError> {
     let loaded_image = boot_services
         .open_protocol_exclusive::<LoadedImage>(boot_services.image_handle())
         .map_err(|_| ParseError::LoadedImageProtocolError)?;
@@ -287,17 +284,17 @@ fn parse_number(num_str: &CStr16) -> Result<usize, ParseError> {
     match (c_h, c2_h) {
         ('0', 'x') => {}
         ('0', 'X') => {}
-        _ => return Err(InvalidValue(num_str.to_string())),
+        _ => return Err(ParseError::InvalidValue(num_str.to_string())),
     }
 
     if num_str.num_bytes() > 2 * (18 + 1) {
-        return Err(NumberTooLarge(num_str.to_string()));
+        return Err(ParseError::NumberTooLarge(num_str.to_string()));
     }
 
     let value = str_iter
         .map(|c| c.to_digit(16).map(|n| n as u8))
         .collect::<Option<Vec<u8>>>()
-        .ok_or_else(|| InvalidValue(num_str.to_string()))?;
+        .ok_or_else(|| ParseError::InvalidValue(num_str.to_string()))?;
     let value_len = value.len();
     let value = value.iter().enumerate().fold(0usize, |acc, (i, &n)| {
         acc + ((n as usize) << (4 * (value_len - i - 1)))

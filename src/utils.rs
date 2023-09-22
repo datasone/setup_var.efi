@@ -14,7 +14,7 @@ use uefi::{
 };
 use uefi_services::{print, println};
 
-pub(crate) enum UEFIVarError {
+pub enum UEFIVarError {
     EnumVars(Status),
     NoCorrespondingVar,
     MultipleVarNoId,
@@ -85,7 +85,7 @@ struct UEFIVariable {
     content:    Vec<u8>,
 }
 
-pub(crate) struct UEFIValue(pub Vec<u8>);
+pub struct UEFIValue(pub Vec<u8>);
 
 impl UEFIValue {
     fn from_usize(value: usize, val_size: usize) -> Self {
@@ -93,7 +93,7 @@ impl UEFIValue {
         Self(value.to_le_bytes()[0..val_size].to_vec())
     }
 
-    pub(crate) fn to_string_with_size(&self, val_size: usize) -> String {
+    pub fn to_string_with_size(&self, val_size: usize) -> String {
         let mut bytes = [0; 8];
         bytes[0..self.0.len()].copy_from_slice(&self.0);
 
@@ -114,7 +114,7 @@ impl Display for UEFIValue {
     }
 }
 
-pub(crate) fn read_val(
+pub fn read_val(
     runtime_services: &RuntimeServices,
     var_name: &CStr16,
     var_id: Option<usize>,
@@ -138,7 +138,7 @@ pub enum WriteStatus {
     Skipped,
 }
 
-pub(crate) fn write_val(
+pub fn write_val(
     runtime_services: &RuntimeServices,
     var_name: &CStr16,
     var_id: Option<usize>,

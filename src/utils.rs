@@ -10,7 +10,7 @@ use uefi::{
     data_types::FromSliceWithNulError,
     prelude::RuntimeServices,
     table::runtime::{VariableAttributes, VariableKey, VariableVendor},
-    CStr16, CString16, Status,
+    CStr16, CString16, Char16, Status,
 };
 use uefi_services::{print, println};
 
@@ -216,7 +216,7 @@ fn read_var(
         .map_err(|e| UEFIVarError::GetVariable(var_name.to_string(), e.status()))?;
 
     Ok(UEFIVariable {
-        name:       cstr16_to_cstring16(var_name),
+        name:       var_name.to_owned(),
         vendor:     var_key.vendor,
         attributes: var_attr,
         content:    buf,
@@ -259,6 +259,66 @@ fn print_keys(
     Ok(())
 }
 
-pub(crate) fn cstr16_to_cstring16(s: &CStr16) -> CString16 {
-    s.to_u16_slice_with_nul().to_vec().try_into().unwrap() // The try_into will success as it's directly obtained from CStr16
+pub trait CStr16Ext {
+    fn to_owned(&self) -> CString16;
+    fn contains(&self, char: Char16) -> bool;
+    fn strip_suffix(&self, suffix: Char16) -> Option<CString16>;
+    /// The CStr16 requires a NUL terminator, so we can only collect them back
+    /// into CString16
+    fn split_to_cstring(&self, split: Char16) -> Vec<CString16>;
+}
+
+impl CStr16Ext for CStr16 {
+    fn to_owned(&self) -> CString16 {
+        self.to_u16_slice_with_nul().to_vec().try_into().unwrap()
+    }
+
+    fn contains(&self, char: Char16) -> bool {
+        self.iter().any(|&c| c == char)
+    }
+
+    fn strip_suffix(&self, suffix: Char16) -> Option<CString16> {
+        let str = self.to_u16_slice();
+        if *str.last()? == u16::from(suffix) {
+            let mut buf = self
+                .as_slice_with_nul()
+                .iter()
+                .map(|&c| u16::from(c))
+                .collect::<Vec<_>>();
+            *buf.last_mut()? = 0;
+            Some(CString16::try_from(buf).unwrap())
+        } else {
+            None
+        }
+    }
+
+    fn split_to_cstring(&self, split: Char16) -> Vec<CString16> {
+        let mut split_strings = Vec::new();
+        let mut current_string = Vec::new();
+
+        for c in self.iter() {
+            if *c != split {
+                current_string.push(u16::from(*c))
+            } else {
+                current_string.push(0u16);
+                split_strings.push(
+                    current_string
+                        .try_into()
+                        .expect("Invalid bytes in arguments"),
+                );
+                current_string = Vec::new()
+            }
+        }
+
+        if !current_string.is_empty() {
+            current_string.push(0u16);
+            split_strings.push(
+                current_string
+                    .try_into()
+                    .expect("Invalid bytes in arguments"),
+            )
+        }
+
+        split_strings
+    }
 }

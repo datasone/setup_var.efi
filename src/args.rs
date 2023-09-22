@@ -13,7 +13,7 @@ use uefi::{
 };
 use uefi_services::println;
 
-use crate::utils::cstr16_to_cstring16;
+use crate::utils::CStr16Ext;
 
 #[derive(Debug)]
 pub enum ParseError {
@@ -186,7 +186,7 @@ fn drop_first_arg(arg: &CStr16) -> bool {
 }
 
 fn parse_args_from_str(options: &CStr16) -> Result<Args, ParseError> {
-    let options = split_cstr16(options, ' '.try_into().unwrap());
+    let options = options.split_to_cstring(' '.try_into().unwrap());
     let opt_len = options.len();
 
     if opt_len == 0 {

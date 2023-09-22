@@ -418,145 +418,111 @@ fn parse_value_arg(arg: &CStr16) -> Result<Arg, ParseError> {
 }
 
 #[allow(dead_code)]
-pub(crate) fn test_functions() {
-    println!("Testing parse_number");
+pub fn test_functions() {
+    println!("Testing parse_hex_number");
     println!(
-        r#"parse_number("0x1"), should be Ok({}), result is {:?}"#,
+        r#"parse_hex_number("0x1"), should be Ok({}), result is {:?}"#,
         0x1,
-        parse_number(&CString16::try_from("0x1").unwrap())
+        parse_hex_number(&CString16::try_from("0x1").unwrap())
     );
     println!(
-        r#"parse_number("0x01"), should be Ok({}), result is {:?}"#,
+        r#"parse_hex_number("0x01"), should be Ok({}), result is {:?}"#,
         0x1,
-        parse_number(&CString16::try_from("0x01").unwrap())
+        parse_hex_number(&CString16::try_from("0x01").unwrap())
     );
     println!(
-        r#"parse_number("0X12e"), should be Ok({}), result is {:?}"#,
+        r#"parse_hex_number("0X12e"), should be Ok({}), result is {:?}"#,
         0x12E,
-        parse_number(&CString16::try_from("0X12e").unwrap())
+        parse_hex_number(&CString16::try_from("0X12e").unwrap())
     );
     println!(
-        r#"parse_number("0x12eFAb"), should be Ok({}), result is {:?}"#,
+        r#"parse_hex_number("0x12eFAb"), should be Ok({}), result is {:?}"#,
         0x12EFAB,
-        parse_number(&CString16::try_from("0x12eFAb").unwrap())
+        parse_hex_number(&CString16::try_from("0x12eFAb").unwrap())
     );
     println!(
-        r#"parse_number("0xDEADBEEFDEADBEEF01"), should be Err({}), result is {:?}"#,
+        r#"parse_hex_number("0xDEADBEEFDEADBEEF01"), should be Err({}), result is {:?}"#,
         ParseError::NumberTooLarge("0xDEADBEEFDEADBEEF01".to_owned()),
-        parse_number(&CString16::try_from("0xDEADBEEFDEADBEEF01").unwrap())
+        parse_hex_number(&CString16::try_from("0xDEADBEEFDEADBEEF01").unwrap())
     );
     println!(
-        r#"parse_number("0x12eFAs"), should be Err({:?}), result is {:?}"#,
+        r#"parse_hex_number("0x12eFAs"), should be Err({:?}), result is {:?}"#,
         ParseError::InvalidValue("0x12eFAs".to_owned()),
-        parse_number(&CString16::try_from("0x12eFAs").unwrap())
+        parse_hex_number(&CString16::try_from("0x12eFAs").unwrap())
     );
     println!(
-        r#"parse_number("abc"), should be Err({:?}), result is {:?}"#,
+        r#"parse_hex_number("abc"), should be Err({:?}), result is {:?}"#,
         ParseError::InvalidValue("abc".to_owned()),
-        parse_number(&CString16::try_from("abc").unwrap())
+        parse_hex_number(&CString16::try_from("abc").unwrap())
     );
 
     println!("Testing parse_named_arg");
     println!(
         r#"parse_named_arg("-h", None), should be Ok({:?}), result is {:?}"#,
         NamedArg::Help,
-        parse_named_arg(
-            &CString16::try_from("-h").unwrap(),
-            &mut core::iter::empty::<CString16>()
-        )
+        parse_named_arg(&CString16::try_from("-h").unwrap())
     );
     println!(
         r#"parse_named_arg("-r", None), should be Ok({:?}), result is {:?}"#,
         NamedArg::Reboot,
-        parse_named_arg(
-            &CString16::try_from("-r").unwrap(),
-            &mut core::iter::empty::<CString16>()
-        )
+        parse_named_arg(&CString16::try_from("-r").unwrap())
     );
     println!(
         r#"parse_named_arg("--reboot", None), should be Ok({:?}), result is {:?}"#,
         NamedArg::Reboot,
-        parse_named_arg(
-            &CString16::try_from("--reboot").unwrap(),
-            &mut core::iter::empty::<CString16>()
-        )
+        parse_named_arg(&CString16::try_from("--reboot").unwrap())
     );
     println!(
         r#"parse_named_arg("--write_on_demand", None), should be Ok({:?}), result is {:?}"#,
         NamedArg::WriteOnDemand,
-        parse_named_arg(
-            &CString16::try_from("--write_on_demand").unwrap(),
-            &mut core::iter::empty::<CString16>()
-        )
+        parse_named_arg(&CString16::try_from("--write_on_demand").unwrap())
     );
     println!(
         r#"parse_named_arg("--help", Some("abc")), should be Ok({:?}), result is {:?}"#,
         NamedArg::Help,
-        parse_named_arg(
-            &CString16::try_from("--help").unwrap(),
-            &mut [CString16::try_from("abc").unwrap()].into_iter()
-        )
-    );
-    println!(
-        r#"parse_named_arg("-s", Some("0x12e")), should be Ok({:?}), result is {:?}"#,
-        NamedArg::ValueSize(0x12e),
-        parse_named_arg(
-            &CString16::try_from("-s").unwrap(),
-            &mut [CString16::try_from("0x12e").unwrap()].into_iter()
-        )
-    );
-    println!(
-        r#"parse_named_arg("-s", Some("CpuSetup")), should be Err({:?}), result is {:?}"#,
-        ParseError::InvalidValue("CpuSetup".to_owned()),
-        parse_named_arg(
-            &CString16::try_from("-s").unwrap(),
-            &mut [CString16::try_from("CpuSetup").unwrap()].into_iter()
-        )
-    );
-    println!(
-        r#"parse_named_arg("-i", Some("0x1")), should be Ok({:?}), result is {:?}"#,
-        NamedArg::VariableId(0x1),
-        parse_named_arg(
-            &CString16::try_from("-i").unwrap(),
-            &mut [CString16::try_from("0x1").unwrap()].into_iter()
-        )
-    );
-    println!(
-        r#"parse_named_arg("-i", Some("CpuSetup")), should be Err({:?}), result is {:?}"#,
-        ParseError::InvalidValue("CpuSetup".to_owned()),
-        parse_named_arg(
-            &CString16::try_from("-i").unwrap(),
-            &mut [CString16::try_from("CpuSetup").unwrap()].into_iter()
-        )
-    );
-    println!(
-        r#"parse_named_arg("-n", Some("CpuSetup")), should be Ok({:?}), result is {:?}"#,
-        NamedArg::CustomName(CString16::try_from("CpuSetup").unwrap()),
-        parse_named_arg(
-            &CString16::try_from("-n").unwrap(),
-            &mut [CString16::try_from("CpuSetup").unwrap()].into_iter()
-        )
+        parse_named_arg(&CString16::try_from("--help").unwrap())
     );
     println!(
         r#"parse_named_arg("0x13", Some("CpuSetup")), should be Err({:?}), result is {:?}"#,
         ParseError::InvalidValue("0x13".to_owned()),
-        parse_named_arg(
-            &CString16::try_from("0x13").unwrap(),
-            &mut [CString16::try_from("CpuSetup").unwrap()].into_iter()
-        )
+        parse_named_arg(&CString16::try_from("0x13").unwrap())
+    );
+
+    println!("Testing parse_value_arg");
+    println!(
+        r#"parse_value_arg("CpuSetup(2):0x19E"), should be Ok({:?}), result is {:?}"#,
+        ValueArg {
+            addr:      ValueAddr {
+                var_name: CString16::try_from("CpuSetup").unwrap(),
+                var_id:   Some(2),
+                offset:   0x19E,
+            },
+            operation: ValueOperation {
+                val_size: 1,
+                op_type:  ValueOperationType::Read,
+            },
+        },
+        parse_value_arg(&CString16::try_from("CpuSetup(2):0x19E").unwrap())
     );
     println!(
-        r#"parse_named_arg("-n", None), should be Err({:?}), result is {:?}"#,
-        ParseError::OptionNoValue("-n".to_owned()),
-        parse_named_arg(
-            &CString16::try_from("-n").unwrap(),
-            &mut core::iter::empty::<CString16>()
-        )
+        r#"parse_value_arg("CpuSetup:0x19E(3)=0x02"), should be Ok({:?}), result is {:?}"#,
+        ValueArg {
+            addr:      ValueAddr {
+                var_name: CString16::try_from("CpuSetup").unwrap(),
+                var_id:   None,
+                offset:   0x19E,
+            },
+            operation: ValueOperation {
+                val_size: 3,
+                op_type:  ValueOperationType::Write(0x02),
+            },
+        },
+        parse_value_arg(&CString16::try_from("CpuSetup:0x19E(3)=0x02").unwrap())
     );
 
     println!("Testing parse_args_from_str");
     println!(
-        r#"parse_args_from_str(""), should be Ok({:?}), result is {:?}"#,
+        r#"parse_args_from_str(".\setup_var.efi"), should be Ok({:?}), result is {:?}"#,
         Args {
             help_msg: true,
             ..Default::default()
@@ -564,7 +530,7 @@ pub(crate) fn test_functions() {
         parse_args_from_str(&CString16::try_from(".\\setup_var.efi").unwrap())
     );
     println!(
-        r#"parse_args_from_str("-h"), should be Ok({:?}), result is {:?}"#,
+        r#"parse_args_from_str(".\setup_var.efi -h"), should be Ok({:?}), result is {:?}"#,
         Args {
             help_msg: true,
             ..Default::default()
@@ -572,122 +538,82 @@ pub(crate) fn test_functions() {
         parse_args_from_str(&CString16::try_from(".\\setup_var.efi -h").unwrap())
     );
     println!(
-        r#"parse_args_from_str("0x12 -n VAR -i 0x1 -h"), should be Ok({:?}), result is {:?}"#,
+        r#"parse_args_from_str(".\setup_var.efi VAR:0x12 -h"), should be Ok({:?}), result is {:?}"#,
         Args {
             help_msg: true,
-            var_name: Some(CString16::try_from("VAR").unwrap()),
-            offset: Some(0x12),
-            var_id: Some(0x1),
+            value_args: vec![ValueArg {
+                addr:      ValueAddr {
+                    var_name: CString16::try_from("VAR").unwrap(),
+                    var_id:   None,
+                    offset:   0x12,
+                },
+                operation: ValueOperation {
+                    val_size: 1,
+                    op_type:  ValueOperationType::Read,
+                },
+            },],
             ..Default::default()
         },
-        parse_args_from_str(
-            &CString16::try_from(".\\setup_var.efi 0x12 -n VAR -i 0x1 -h").unwrap()
-        )
+        parse_args_from_str(&CString16::try_from(".\\setup_var.efi VAR:0x12 -h").unwrap())
     );
     println!(
-        r#"parse_args_from_str("0x12 -n -h"), should be Ok({:?}), result is {:?}"#,
-        Args {
-            var_name: Some(CString16::try_from("-h").unwrap()),
-            offset: Some(0x12),
-            ..Default::default()
-        },
-        parse_args_from_str(&CString16::try_from(".\\setup_var.efi 0x12 -n -h").unwrap())
-    );
-    println!(
-        r#"parse_args_from_str("0x12 0x12 --write_on_demand -n VAR -h"), should be Ok({:?}), result is {:?}"#,
+        r#"parse_args_from_str(".\setup_var.efi VAR:0x12=0x12 --write_on_demand -h"), should be Ok({:?}), result is {:?}"#,
         Args {
             help_msg: true,
-            var_name: Some(CString16::try_from("VAR").unwrap()),
-            offset: Some(0x12),
-            value: Some(0x12),
             write_on_demand: true,
+            value_args: vec![ValueArg {
+                addr:      ValueAddr {
+                    var_name: CString16::try_from("VAR").unwrap(),
+                    var_id:   None,
+                    offset:   0x12,
+                },
+                operation: ValueOperation {
+                    val_size: 1,
+                    op_type:  ValueOperationType::Write(0x12),
+                },
+            },],
             ..Default::default()
         },
         parse_args_from_str(
-            &CString16::try_from(".\\setup_var.efi 0x12 0x12 --write_on_demand -n VAR -h").unwrap()
+            &CString16::try_from(".\\setup_var.efi VAR:0x12=0x12 --write_on_demand -h").unwrap()
         )
     );
     println!(
-        r#"parse_args_from_str("0x12 0x12e -n VAR"), should be Err({:?}), result is {:?}"#,
+        r#"parse_args_from_str(".\setup_var.efi VAR:0x12=0x12e"), should be Err({:?}), result is {:?}"#,
         ParseError::InvalidArgs(ArgsError::ValLargerThanSize(0x12e, 1)),
-        parse_args_from_str(&CString16::try_from(".\\setup_var.efi 0x12 0x12e -n VAR").unwrap())
+        parse_args_from_str(&CString16::try_from(".\\setup_var.efi VAR:0x12=0x12e").unwrap())
     );
     println!(
-        r#"parse_args_from_str("0x12 0x12e -n"), should be Err({:?}), result is {:?}"#,
-        ParseError::OptionNoValue("-n".to_owned()),
-        parse_args_from_str(&CString16::try_from(".\\setup_var.efi 0x12 0x12e -n").unwrap())
-    );
-    println!(
-        r#"parse_args_from_str("-s 0x01 -n VAR"), should be Err({:?}), result is {:?}"#,
-        ParseError::InvalidArgs(ArgsError::MissingOffset),
-        parse_args_from_str(&CString16::try_from(".\\setup_var.efi -s 0x01 -n VAR").unwrap())
-    );
-    println!(
-        r#"parse_args_from_str("-s 0x01 -n VAR -h --write_on_demand"), should be Ok({:?}), result is {:?}"#,
+        r#"parse_args_from_str(".\setup_var.efi VAR:0x01(3) VAR2(2):0x03=0x05"), should be Ok({:?}), result is {:?}"#,
         Args {
-            help_msg: true,
-            var_name: Some(CString16::try_from("VAR").unwrap()),
-            val_size: Some(0x1),
-            write_on_demand: true,
+            value_args: vec![
+                ValueArg {
+                    addr:      ValueAddr {
+                        var_name: CString16::try_from("VAR").unwrap(),
+                        var_id:   None,
+                        offset:   0x01,
+                    },
+                    operation: ValueOperation {
+                        val_size: 3,
+                        op_type:  ValueOperationType::Read,
+                    },
+                },
+                ValueArg {
+                    addr:      ValueAddr {
+                        var_name: CString16::try_from("VAR2").unwrap(),
+                        var_id:   Some(2),
+                        offset:   0x03,
+                    },
+                    operation: ValueOperation {
+                        val_size: 1,
+                        op_type:  ValueOperationType::Write(0x05),
+                    },
+                }
+            ],
             ..Default::default()
         },
         parse_args_from_str(
-            &CString16::try_from(".\\setup_var.efi -s 0x01 -n VAR -h --write_on_demand").unwrap()
-        )
-    );
-    println!(
-        r#"parse_args_from_str("0x12 0x12e -n VAR -n VAR1"), should be Err({:?}), result is {:?}"#,
-        ParseError::AppliedMultipleTimes("-n".to_owned()),
-        parse_args_from_str(
-            &CString16::try_from(".\\setup_var.efi 0x12 0x12e -n VAR -n VAR1").unwrap()
-        )
-    );
-    println!(
-        r#"parse_args_from_str("0x01 -n VAR -h --write_on_demand"), w/o exe name, should be Ok({:?}), result is {:?}"#,
-        Args {
-            offset: Some(0x1),
-            help_msg: true,
-            var_name: Some(CString16::try_from("VAR").unwrap()),
-            write_on_demand: true,
-            ..Default::default()
-        },
-        parse_args_from_str(&CString16::try_from("0x01 -n VAR -h --write_on_demand").unwrap())
-    );
-    println!(
-        r#"parse_args_from_str("-s 0x01 -n VAR -h --write_on_demand"), w/o exe name, should be Ok({:?}), result is {:?}"#,
-        Args {
-            help_msg: true,
-            var_name: Some(CString16::try_from("VAR").unwrap()),
-            val_size: Some(0x1),
-            write_on_demand: true,
-            ..Default::default()
-        },
-        parse_args_from_str(&CString16::try_from("-s 0x01 -n VAR -h --write_on_demand").unwrap())
-    );
-    println!(
-        r#"parse_args_from_str("-s 0x01 -n VAR -h --write_on_demand"), w/ ambiguous exe name, should be Ok({:?}), result is {:?}"#,
-        Args {
-            help_msg: true,
-            var_name: Some(CString16::try_from("VAR").unwrap()),
-            val_size: Some(0x1),
-            write_on_demand: true,
-            ..Default::default()
-        },
-        parse_args_from_str(
-            &CString16::try_from("0x14.efi -s 0x01 -n VAR -h --write_on_demand").unwrap()
-        )
-    );
-    println!(
-        r#"parse_args_from_str("-s 0x01 -n VAR -h --write_on_demand"), w/ambiguous exe name, should be Ok({:?}), result is {:?}"#,
-        Args {
-            help_msg: true,
-            var_name: Some(CString16::try_from("VAR").unwrap()),
-            val_size: Some(0x1),
-            write_on_demand: true,
-            ..Default::default()
-        },
-        parse_args_from_str(
-            &CString16::try_from("-s.efi -s 0x01 -n VAR -h --write_on_demand").unwrap()
+            &CString16::try_from(".\\setup_var.efi VAR:0x01(3) VAR2(2):0x03=0x05").unwrap()
         )
     );
 }

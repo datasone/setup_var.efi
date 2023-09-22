@@ -8,5 +8,5 @@ license = "MIT OR Apache-2.0"
 
 [dependencies]
 log = "0.4"
-uefi = { version = "0.17", features = ["alloc", "exts"] }
-uefi-services = "0.14"
+uefi = { version = "0.24", features = ["alloc"] }
+uefi-services = "0.21"

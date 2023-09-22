@@ -1,6 +1,8 @@
 use alloc::{
     borrow::ToOwned,
+    format,
     string::{String, ToString},
+    vec,
     vec::Vec,
 };
 use core::fmt::{Display, Formatter};
@@ -21,8 +23,6 @@ pub enum ParseError {
     LoadOptionsError(LoadOptionsError),
     InvalidValue(String),
     NumberTooLarge(String),
-    AppliedMultipleTimes(String),
-    OptionNoValue(String),
     InvalidArgs(ArgsError),
 }
 
@@ -41,12 +41,6 @@ impl Display for ParseError {
             Self::NumberTooLarge(s) => {
                 write!(f, "Specified number {s} is too large (larger than 64-bit)")
             }
-            Self::AppliedMultipleTimes(s) => {
-                write!(f, "Argument {s} is applied multiple times, once expected")
-            }
-            Self::OptionNoValue(s) => {
-                write!(f, "Argument {s} has no value specified")
-            }
             Self::InvalidArgs(e) => {
                 write!(f, "{e}")
             }
@@ -54,14 +48,63 @@ impl Display for ParseError {
     }
 }
 
+#[derive(Debug, Default, Clone)]
+pub struct ValueAddr {
+    pub var_name: CString16,
+    pub var_id:   Option<usize>,
+    pub offset:   usize,
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct ValueOperation {
+    pub val_size: usize,
+    pub op_type:  ValueOperationType,
+}
+
+#[derive(Debug, Default, Clone)]
+pub enum ValueOperationType {
+    #[default]
+    Read,
+    Write(usize),
+}
+
+impl ValueOperation {
+    pub fn validate(&self) -> Result<(), ArgsError> {
+        if let ValueOperationType::Write(val) = self.op_type {
+            if val > (1 << (self.val_size * 8)) {
+                Err(ArgsError::ValLargerThanSize(val, self.val_size))
+            } else {
+                Ok(())
+            }
+        } else {
+            Ok(())
+        }
+    }
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct ValueArg {
+    pub addr:      ValueAddr,
+    pub operation: ValueOperation,
+}
+
+#[derive(Debug)]
+enum NamedArg {
+    Help,
+    Reboot,
+    WriteOnDemand,
+}
+
+#[derive(Debug)]
+enum Arg {
+    Named(NamedArg),
+    Value(ValueArg),
+}
+
 #[derive(Debug, Default)]
 pub struct Args {
+    pub value_args:      Vec<ValueArg>,
     pub help_msg:        bool,
-    pub offset:          Option<usize>,
-    pub value:           Option<usize>,
-    pub val_size:        Option<usize>,
-    pub var_name:        Option<CString16>,
-    pub var_id:          Option<usize>,
     pub write_on_demand: bool,
     pub reboot:          bool,
 }
@@ -70,21 +113,10 @@ impl Args {
     fn validate(&self) -> Result<(), ArgsError> {
         if self.help_msg {
             Ok(())
-        } else if self.offset.is_none() {
-            Err(ArgsError::MissingOffset)
-        } else if let Some(&value) = self.value.as_ref() {
-            let val_size = if let Some(&vs) = self.val_size.as_ref() {
-                vs
-            } else {
-                1
-            };
-            if value > (1 << (val_size * 8)) {
-                Err(ArgsError::ValLargerThanSize(value, val_size))
-            } else {
-                Ok(())
-            }
         } else {
-            Ok(())
+            self.value_args
+                .iter()
+                .try_for_each(|va| va.operation.validate())
         }
     }
 }
@@ -97,9 +129,6 @@ pub enum ArgsError {
 impl Display for ArgsError {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         match self {
-            Self::MissingOffset => {
-                write!(f, "Offset is not provided")
-            }
             Self::ValLargerThanSize(value, size) => {
                 write!(
                     f,
@@ -117,16 +146,6 @@ impl From<ArgsError> for ParseError {
     fn from(value: ArgsError) -> Self {
         Self::InvalidArgs(value)
     }
-}
-
-#[derive(Debug)]
-enum NamedArg {
-    ValueSize(usize),
-    CustomName(CString16),
-    VariableId(usize),
-    Help,
-    Reboot,
-    WriteOnDemand,
 }
 
 pub const HELP_MSG: &str = r#"Usage:
@@ -178,11 +197,27 @@ fn drop_first_arg(arg: &CStr16) -> bool {
     #[allow(clippy::needless_bool)]
     if has_efi_ext {
         true // efi extension, treated as the name of the executable file
-    } else if starts_with(arg, '-') || parse_number(arg).is_ok() {
+    } else if starts_with(arg, '-') {
         false // Highly probably an option
     } else {
-        true // We can't decide what is the first arg, defaults to drop it
+        // Now that we can't decide what is the first arg as they starts with the var
+        // name, defaults to keep it
+        false
     }
+}
+
+macro_rules! try_parsers {
+    ($input:expr, $parser:ident) => {{
+        $parser($input)
+    }};
+
+    ($input:expr, $parser:ident, $( $parsers:ident ),*) => {{
+        if let Ok(val) = $parser($input) {
+            Ok(val)
+        } else {
+            try_parsers!($input, $($parsers),*)
+        }
+    }};
 }
 
 fn parse_args_from_str(options: &CStr16) -> Result<Args, ParseError> {
@@ -208,56 +243,47 @@ fn parse_args_from_str(options: &CStr16) -> Result<Args, ParseError> {
         option_iter.next(); // Skips executable argv
     }
 
-    let mut args = Args::default();
-    while let Some(option) = option_iter.next() {
-        if option.as_slice_with_nul().len() == 1 {
-            continue; // empty string
-        }
-        if starts_with(&option, '-') {
-            match parse_named_arg(&option, &mut option_iter)? {
-                Help => {
-                    args.help_msg = true;
-                }
-                Reboot => {
-                    args.reboot = true;
-                }
-                WriteOnDemand => {
-                    args.write_on_demand = true;
-                }
-                CustomName(name) => {
-                    if args.var_name.is_none() {
-                        args.var_name = Some(name)
-                    } else {
-                        return Err(AppliedMultipleTimes(option.to_string()));
-                    }
-                }
-                ValueSize(size) => {
-                    if args.val_size.is_none() {
-                        args.val_size = Some(size)
-                    } else {
-                        return Err(AppliedMultipleTimes(option.to_string()));
-                    }
-                }
-                VariableId(id) => {
-                    if args.var_id.is_none() {
-                        args.var_id = Some(id)
-                    } else {
-                        return Err(AppliedMultipleTimes(option.to_string()));
-                    }
-                }
-            }
-        } else if let Ok(num) = parse_number(&option) {
-            if args.offset.is_none() {
-                args.offset = Some(num)
-            } else if args.value.is_none() {
-                args.value = Some(num)
+    let args = option_iter
+        .filter(|s| s.as_slice_with_nul().len() != 1)
+        .map(|s| {
+            try_parsers!(&s, parse_named_arg, parse_value_arg)
+                .map_err(|e| ParseError::InvalidValue(format!("{s}: {e}")))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+
+    let named_args = args
+        .iter()
+        .filter(|arg| matches!(arg, Arg::Named(_)))
+        .map(|arg| {
+            if let Arg::Named(arg) = arg {
+                arg
             } else {
-                return Err(InvalidValue(option.to_string()));
+                unreachable!()
             }
-        } else {
-            return Err(InvalidValue(option.to_string()));
+        })
+        .collect::<Vec<_>>();
+    let value_args = args
+        .iter()
+        .filter(|arg| matches!(arg, Arg::Value(_)))
+        .map(|arg| {
+            if let Arg::Value(arg) = arg {
+                arg.clone()
+            } else {
+                unreachable!()
+            }
+        })
+        .collect::<Vec<_>>();
+
+    let mut args = Args::default();
+    for named_arg in named_args {
+        match named_arg {
+            NamedArg::Help => args.help_msg = true,
+            NamedArg::Reboot => args.reboot = true,
+            NamedArg::WriteOnDemand => args.write_on_demand = true,
         }
     }
+
+    args.value_args = value_args;
 
     args.validate()?;
     Ok(args)
@@ -271,10 +297,11 @@ fn starts_with(s: &CStr16, c: char) -> bool {
 }
 
 fn try_next_char(iter: &mut impl Iterator<Item = char>, str: &CStr16) -> Result<char, ParseError> {
-    iter.next().ok_or_else(|| InvalidValue(str.to_string()))
+    iter.next()
+        .ok_or_else(|| ParseError::InvalidValue(str.to_string()))
 }
 
-fn parse_number(num_str: &CStr16) -> Result<usize, ParseError> {
+fn parse_hex_number(num_str: &CStr16) -> Result<usize, ParseError> {
     let mut str_iter = num_str.iter().map(|&c| char::from(c));
 
     // Prefix 0x(0X)
@@ -303,60 +330,91 @@ fn parse_number(num_str: &CStr16) -> Result<usize, ParseError> {
     Ok(value)
 }
 
-fn parse_named_arg(
-    key: &CStr16,
-    opts: &mut impl Iterator<Item = CString16>,
-) -> Result<NamedArg, ParseError> {
-    if key.eq_str_until_nul(&"-h") || key.eq_str_until_nul(&"--help") {
-        return Ok(Help);
-    } else if key.eq_str_until_nul(&"-r") || key.eq_str_until_nul(&"--reboot") {
-        return Ok(Reboot);
-    } else if key.eq_str_until_nul(&"--write_on_demand") {
-        return Ok(WriteOnDemand);
+fn parse_number(num_str: &CStr16) -> Result<usize, ParseError> {
+    let chars = num_str.iter().map(|&c| char::from(c)).collect::<Vec<_>>();
+    if chars.iter().any(|c| !c.is_ascii_digit()) {
+        Err(ParseError::InvalidValue(num_str.to_string()))?
     }
 
-    let value = opts.next();
-    let value = value.as_ref().ok_or_else(|| OptionNoValue(key.to_string()));
+    let value = chars
+        .into_iter()
+        .fold(0usize, |acc, n| acc * 10 + (n as u8 - b'0') as usize);
 
-    if key.eq_str_until_nul(&"-s") {
-        Ok(ValueSize(parse_number(value?)?))
-    } else if key.eq_str_until_nul(&"-n") {
-        Ok(CustomName(cstr16_to_cstring16(value?)))
-    } else if key.eq_str_until_nul(&"-i") {
-        Ok(VariableId(parse_number(value?)?))
+    Ok(value)
+}
+
+fn parse_named_arg(key: &CStr16) -> Result<Arg, ParseError> {
+    if key.eq_str_until_nul(&"-h") || key.eq_str_until_nul(&"--help") {
+        Ok(Arg::Named(NamedArg::Help))
+    } else if key.eq_str_until_nul(&"-r") || key.eq_str_until_nul(&"--reboot") {
+        Ok(Arg::Named(NamedArg::Reboot))
+    } else if key.eq_str_until_nul(&"--write_on_demand") {
+        Ok(Arg::Named(NamedArg::WriteOnDemand))
     } else {
-        Err(InvalidValue(key.to_string()))
+        Err(ParseError::InvalidValue(key.to_string()))
     }
 }
 
-fn split_cstr16(s: &CStr16, split_char: Char16) -> Vec<CString16> {
-    let mut split_strings = Vec::new();
-    let mut current_string = Vec::new();
+fn parse_value_arg(arg: &CStr16) -> Result<Arg, ParseError> {
+    let mut arg_split = arg.split_to_cstring(':'.try_into().unwrap());
+    if arg_split.len() != 2 {
+        Err(ParseError::InvalidValue(arg.to_string()))?
+    }
 
-    for c in s.iter() {
-        if *c != split_char {
-            current_string.push(u16::from(*c))
-        } else {
-            current_string.push(0u16);
-            split_strings.push(
-                current_string
-                    .try_into()
-                    .expect("Invalid bytes in arguments"),
-            );
-            current_string = Vec::new()
+    let mut var_name = arg_split.swap_remove(0);
+    let mut var_id = None;
+
+    if var_name.contains('('.try_into().unwrap()) {
+        let mut arg_split = var_name.split_to_cstring('('.try_into().unwrap());
+        if arg_split.len() != 2 {
+            Err(ParseError::InvalidValue(var_name.to_string()))?
         }
+        let var_id_str = arg_split[1]
+            .strip_suffix(')'.try_into().unwrap())
+            .ok_or(ParseError::InvalidValue(var_name.to_string()))?;
+
+        var_id = Some(try_parsers!(&var_id_str, parse_number, parse_hex_number)?);
+        var_name = arg_split.swap_remove(0);
     }
 
-    if !current_string.is_empty() {
-        current_string.push(0u16);
-        split_strings.push(
-            current_string
-                .try_into()
-                .expect("Invalid bytes in arguments"),
-        )
+    let mut op_type = ValueOperationType::Read;
+    let mut var_offset = arg_split.swap_remove(0);
+    let mut val_size = 1;
+
+    if var_offset.contains('='.try_into().unwrap()) {
+        let mut arg_split = var_offset.split_to_cstring('='.try_into().unwrap());
+        if arg_split.len() != 2 {
+            Err(ParseError::InvalidValue(var_offset.to_string()))?
+        }
+        let value = try_parsers!(&arg_split[1], parse_hex_number, parse_number)?;
+
+        op_type = ValueOperationType::Write(value);
+        var_offset = arg_split.swap_remove(0);
     }
 
-    split_strings
+    if var_offset.contains('('.try_into().unwrap()) {
+        let mut arg_split = var_offset.split_to_cstring('('.try_into().unwrap());
+        if arg_split.len() != 2 {
+            Err(ParseError::InvalidValue(var_offset.to_string()))?
+        }
+        let val_size_str = arg_split[1]
+            .strip_suffix(')'.try_into().unwrap())
+            .ok_or(ParseError::InvalidValue(var_offset.to_string()))?;
+
+        val_size = try_parsers!(&val_size_str, parse_number, parse_hex_number)?;
+        var_offset = arg_split.swap_remove(0);
+    }
+
+    let offset = try_parsers!(&var_offset, parse_hex_number, parse_number)?;
+
+    Ok(Arg::Value(ValueArg {
+        addr:      ValueAddr {
+            var_name,
+            var_id,
+            offset,
+        },
+        operation: ValueOperation { val_size, op_type },
+    }))
 }
 
 #[allow(dead_code)]

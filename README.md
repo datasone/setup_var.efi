@@ -3,6 +3,10 @@ This tool is a rewritten version of the [modded grub with setup_var commands](ht
 
 ⚠ Use this tool with extreme caution as accessing wrong varstore or variable may completely brick your computer!
 
+---
+**The new usage document is for git master version. For current newest release (0.2.x), refer to [document of that version](https://github.com/datasone/setup_var.efi/blob/0.2.x/README.md).**
+
+---
 Note: If you have been using the modded grub tool, you may want to refer to [the cheatsheet](#grub-cheatsheet).
 
 ## Term definitions
@@ -61,7 +65,7 @@ The legacy grub commands can be mapped to these usages of this tool:
 - `setup_var_cv name offset [value_size] [value]`: This was the full-featured command, to use full features, use `setup_var.efi name:offset(value_size)[=value]`, in which the `(value_size)` can be omitted for 1-byte value.
 
 ## Build
-```
+```shell
 cargo build [--release]
 ```
 

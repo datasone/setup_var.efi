@@ -1,4 +1,5 @@
 use alloc::{
+    borrow::ToOwned,
     format,
     string::{String, ToString},
     vec,
@@ -7,7 +8,7 @@ use alloc::{
 use core::fmt::{Display, Formatter};
 
 use uefi::{
-    data_types::FromSliceWithNulError,
+    data_types::{chars::NUL_16, FromSliceWithNulError},
     prelude::RuntimeServices,
     table::runtime::{VariableAttributes, VariableKey, VariableVendor},
     CStr16, CString16, Char16, Status,
@@ -88,7 +89,7 @@ struct UEFIVariable {
 pub struct UEFIValue(pub Vec<u8>);
 
 impl UEFIValue {
-    fn from_usize(value: usize, val_size: usize) -> Self {
+    pub fn from_usize(value: usize, val_size: usize) -> Self {
         let value = value & ((1 << (val_size * 8)) - 1);
         Self(value.to_le_bytes()[0..val_size].to_vec())
     }
@@ -143,7 +144,7 @@ pub fn write_val(
     var_name: &CStr16,
     var_id: Option<usize>,
     offset: usize,
-    value: usize,
+    value: &UEFIValue,
     val_size: usize,
     write_on_demand: bool,
 ) -> Result<WriteStatus, UEFIVarError> {
@@ -155,7 +156,6 @@ pub fn write_val(
         ));
     }
 
-    let value = UEFIValue::from_usize(value, val_size);
     let slice = &mut var.content[offset..offset + val_size];
 
     if write_on_demand && slice == value.0 {
@@ -260,21 +260,29 @@ fn print_keys(
 }
 
 pub trait CStr16Ext {
-    fn to_owned(&self) -> CString16;
     fn contains(&self, char: Char16) -> bool;
+    fn strip_prefix(&self, prefix: Char16) -> Option<&CStr16>;
     fn strip_suffix(&self, suffix: Char16) -> Option<CString16>;
     /// The CStr16 requires a NUL terminator, so we can only collect them back
     /// into CString16
     fn split_to_cstring(&self, split: Char16) -> Vec<CString16>;
+    fn split_only_first(&self, split: Char16) -> Option<(CString16, CString16)>;
+    fn trim(&self) -> CString16;
+    fn starts_with(&self, char: Char16) -> bool;
 }
 
 impl CStr16Ext for CStr16 {
-    fn to_owned(&self) -> CString16 {
-        self.to_u16_slice_with_nul().to_vec().try_into().unwrap()
-    }
-
     fn contains(&self, char: Char16) -> bool {
         self.iter().any(|&c| c == char)
+    }
+
+    fn strip_prefix(&self, prefix: Char16) -> Option<&CStr16> {
+        if *self.iter().next()? == prefix {
+            let str_ref = unsafe { CStr16::from_u16_with_nul_unchecked(&*(&self.as_slice_with_nul()[1..] as *const [Char16] as *const [u16])) };
+            Some(str_ref)
+        } else {
+            None
+        }
     }
 
     fn strip_suffix(&self, suffix: Char16) -> Option<CString16> {
@@ -321,4 +329,54 @@ impl CStr16Ext for CStr16 {
 
         split_strings
     }
+
+    fn split_only_first(&self, split: Char16) -> Option<(CString16, CString16)> {
+        let index = self.iter().position(|&c| c == split)?;
+
+        // We have to copy twice and check validity again???
+        let mut first_str = self.as_slice()[..index].to_vec();
+        first_str.push(NUL_16);
+
+        let mut second_str = self.as_slice()[index + 1..].to_vec();
+        second_str.push(NUL_16);
+
+        let first_str = char16_vec_to_cstring16(first_str);
+        let second_str = char16_vec_to_cstring16(second_str);
+
+        Some((first_str, second_str))
+    }
+
+    fn trim(&self) -> CString16 {
+        let is_space = |&c| c == ' '.try_into().unwrap() || c == '\t'.try_into().unwrap();
+
+        let mut start = 0;
+        for (i, c) in self.iter().enumerate() {
+            if !is_space(c) {
+                start = i;
+            }
+        }
+
+        let mut end = self.num_chars() - 1;
+        for (i, c) in self.as_slice().iter().rev().enumerate() {
+            if !is_space(c) {
+                end = i;
+            }
+        }
+
+        let mut str = self.as_slice()[start..=end].to_vec();
+        str.push(NUL_16);
+
+        char16_vec_to_cstring16(str)
+    }
+
+    fn starts_with(&self, char: Char16) -> bool {
+        *self.iter().next().unwrap_or(&NUL_16) == char
+    }
+}
+
+/// We have no way to directly construct CString16, and as it does NOT use
+/// repr(transparent). We even cannot construct it with unsafe operations. A
+/// copy and char validity check is required in this function.
+fn char16_vec_to_cstring16(s: Vec<Char16>) -> CString16 {
+    CString16::try_from(s.into_iter().map(u16::from).collect::<Vec<_>>()).unwrap()
 }

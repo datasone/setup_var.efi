@@ -56,6 +56,44 @@ For changing BIOS settings, you may use those following steps to obtain the vari
 5. Search for `VarStoreId: {id}`, where `{id}` is the id found earlier. And note the `Name` after it.
 6. Change the value using noted variable(varstore) name, offset, and size.
 
+## Input File
+`setup_var.efi` now supports specifying with a input file (by UEFI shell redirection). All options that can be specified with arguments are available in input file.
+
+The input file consists of three parts:
+- Named arguments which are specified with a leading `@`.
+- Defining a value address reference (to make the input file more readable) with `:=`.
+- Specifying value arguments as how they are specified in progrm arguments.
+
+Comments starting with `#` can be specified in the input file.
+
+### Input File Example
+```
+# Named arguments
+# @reboot # Reboot after executing setup_var.efi
+@write_on_demand # Only write values when necessary
+
+# Address Definition
+ADLImonSlope:=CpuSetup:0x016E
+ADLImonPrefix:=CpuSetup:0x0182
+
+# Value Args
+# Address can be referenced with leading '$'
+$ADLImonSlope=0x14
+$ADLImonPrefix=0x01
+
+# Normal value argument also works
+CpuSetup:0x0178(2)=0x4E20
+```
+
+The output of `setup.var.efi` has also be altered to match the format of the input file. So you can save your configurations with
+```shell
+setup_var.efi CpuSetup:0x10E=0x1A > vars.txt
+```
+and load them afterwards with
+```shell
+setup_var.efi < vars.txt
+```
+
 ## GRUB Cheatsheet
 The legacy grub commands can be mapped to these usages of this tool:
 - `setup_var offset [value]`: `setup_var.efi Setup:offset[=value]`.

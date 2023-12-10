@@ -289,7 +289,7 @@ impl CStr16Ext for CStr16 {
         let str = self.to_u16_slice();
         if *str.last()? == u16::from(suffix) {
             let mut buf = self
-                .as_slice_with_nul()
+                .as_slice()
                 .iter()
                 .map(|&c| u16::from(c))
                 .collect::<Vec<_>>();

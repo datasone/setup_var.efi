@@ -4,7 +4,7 @@ This tool is a rewritten version of the [modded grub with setup_var commands](ht
 ⚠ Use this tool with extreme caution as accessing wrong varstore or variable may completely brick your computer!
 
 ---
-**The new usage document is for git master version. For current newest release (0.2.x), refer to [document of that version](https://github.com/datasone/setup_var.efi/blob/0.2.x/README.md).**
+**The new usage document is for 0.3.0 version and later with the new syntax for specifying variables. For 0.2.x releases with the old syntax (0.2.x will still be maintained so you can continue to use that), refer to [document of that version](https://github.com/datasone/setup_var.efi/blob/0.2.x/README.md).**
 
 ---
 Note: If you have been using the modded grub tool, you may want to refer to [the cheatsheet](#grub-cheatsheet).

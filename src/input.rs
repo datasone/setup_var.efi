@@ -30,6 +30,10 @@ fn read_to_string(stdin: &mut Input) -> uefi::Result<CString16> {
 
 pub fn parse_input(system_table: &mut SystemTable<Boot>) -> Result<Args, ParseError> {
     let content = read_to_string(system_table.stdin()).map_err(|_| ParseError::LoadStdInError)?;
+    if content.is_empty() {
+        return Err(ParseError::NoInput);
+    }
+    let content = content.strip_prefix('\u{feff}'.try_into().unwrap()).unwrap_or(&content);
 
     let lines = content.split_to_cstring('\n'.try_into().unwrap());
     let lines = lines.into_iter().filter_map(|s| {

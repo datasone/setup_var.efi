@@ -25,6 +25,7 @@ pub enum ParseError {
     NumberTooLarge(String),
     InvalidArgs(ArgsError),
     NoArgs,
+    NoInput,
     LoadStdInError,
     AddrDefWrite(String),
 }
@@ -49,6 +50,10 @@ impl Display for ParseError {
             }
             Self::NoArgs => {
                 // This error is not meant to be returned to user
+                write!(f, "")
+            }
+            Self::NoInput => {
+                // This error is not meant to be returned to user as well
                 write!(f, "")
             }
             Self::LoadStdInError => {
@@ -264,10 +269,7 @@ fn parse_args_from_str(options: &CStr16) -> Result<Args, ParseError> {
     let mut option_iter = options.into_iter();
     if drop_first_arg(&first_arg) {
         if opt_len == 1 {
-            return Ok(Args {
-                help_msg: true,
-                ..Default::default()
-            });
+            return Err(ParseError::NoArgs);
         }
         option_iter.next(); // Skips executable argv
     }

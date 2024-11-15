@@ -28,15 +28,17 @@ fn main(_image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
 
             args
         }
-        Err(ParseError::NoArgs) => {
-            match parse_input(&mut system_table) {
-                Ok(args) => args,
-                Err(e) => {
-                    println!("Error parsing input file:\n{e}");
-                    return Status::INVALID_PARAMETER;
-                }
+        Err(ParseError::NoArgs) => match parse_input(&mut system_table) {
+            Ok(args) => args,
+            Err(ParseError::NoInput) => {
+                println!("{}", HELP_MSG);
+                return Status::INVALID_PARAMETER;
             }
-        }
+            Err(e) => {
+                println!("Error parsing input file:\n{e}");
+                return Status::INVALID_PARAMETER;
+            }
+        },
         Err(e) => {
             println!("Error parsing arguments:\n{e}");
             return Status::INVALID_PARAMETER;

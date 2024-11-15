@@ -1,18 +1,20 @@
-use alloc::{borrow::ToOwned, string::ToString, vec::Vec};
-use alloc::borrow::Cow;
+use alloc::{
+    borrow::{Cow, ToOwned},
+    string::ToString,
+    vec::Vec,
+};
 
 use uefi::{
+    CStr16, CString16,
+    data_types::EqStrUntilNul,
     prelude::*,
     proto::console::text::{Input, Key},
-    CStr16, CString16,
 };
-use uefi::data_types::EqStrUntilNul;
 
 use crate::{
-    args::{ParseError, ValueAddr, ValueArg, ValueOperation},
+    args::{Args, NamedArg, ParseError, ValueAddr, ValueArg, ValueOperation},
     utils::CStr16Ext,
 };
-use crate::args::{Args, NamedArg};
 
 fn read_to_string(stdin: &mut Input) -> uefi::Result<CString16> {
     let mut str = CString16::new();
@@ -55,24 +57,45 @@ pub fn parse_input(system_table: &mut SystemTable<Boot>) -> Result<Args, ParseEr
         })
         .collect::<Result<Vec<_>, _>>()?;
 
-    let address_defs = entries.iter().filter(|e| matches!(e, FileInputEntry::AddressDef { .. })).map(|e| e.as_address_def()).collect::<Vec<_>>();
-    let mut val_args = entries.iter().filter(|e| matches!(e, FileInputEntry::ValueArg(_))).map(|e| e.as_value_arg()).cloned().collect::<Vec<_>>();
+    let address_defs = entries
+        .iter()
+        .filter(|e| matches!(e, FileInputEntry::AddressDef { .. }))
+        .map(|e| e.as_address_def())
+        .collect::<Vec<_>>();
+    let mut val_args = entries
+        .iter()
+        .filter(|e| matches!(e, FileInputEntry::ValueArg(_)))
+        .map(|e| e.as_value_arg())
+        .cloned()
+        .collect::<Vec<_>>();
 
-    let address_refs = entries.iter().filter(|e| matches!(e, FileInputEntry::AddressRef { .. }));
-    let mut address_ref_args = address_refs.map(|e| {
-        match e {
+    let address_refs = entries
+        .iter()
+        .filter(|e| matches!(e, FileInputEntry::AddressRef { .. }));
+    let mut address_ref_args = address_refs
+        .map(|e| match e {
             FileInputEntry::AddressRef { name, operation } => {
-                let (_, addr) = address_defs.iter().find(|(def_name, _)| name == *def_name).ok_or_else(|| ParseError::InvalidValue(name.to_string()))?;
-                Ok(ValueArg { addr: (*addr).clone(), operation: *operation })
+                let (_, addr) = address_defs
+                    .iter()
+                    .find(|(def_name, _)| name == *def_name)
+                    .ok_or_else(|| ParseError::InvalidValue(name.to_string()))?;
+                Ok(ValueArg {
+                    addr:      (*addr).clone(),
+                    operation: *operation,
+                })
             }
             _ => unreachable!(),
-        }
-    }).collect::<Result<Vec<_>, ParseError>>()?;
+        })
+        .collect::<Result<Vec<_>, ParseError>>()?;
 
     val_args.append(&mut address_ref_args);
 
-    let reboot = entries.iter().any(|e| matches!(e, FileInputEntry::NamedArg(NamedArg::Reboot)));
-    let write_on_demand = entries.iter().any(|e| matches!(e, FileInputEntry::NamedArg(NamedArg::WriteOnDemand)));
+    let reboot = entries
+        .iter()
+        .any(|e| matches!(e, FileInputEntry::NamedArg(NamedArg::Reboot)));
+    let write_on_demand = entries
+        .iter()
+        .any(|e| matches!(e, FileInputEntry::NamedArg(NamedArg::WriteOnDemand)));
 
     Ok(Args {
         value_args: val_args,
@@ -83,9 +106,15 @@ pub fn parse_input(system_table: &mut SystemTable<Boot>) -> Result<Args, ParseEr
 }
 
 enum FileInputEntry {
-    AddressDef { name: CString16, addr: ValueAddr },
+    AddressDef {
+        name: CString16,
+        addr: ValueAddr,
+    },
     ValueArg(ValueArg),
-    AddressRef { name: CString16, operation: ValueOperation },
+    AddressRef {
+        name:      CString16,
+        operation: ValueOperation,
+    },
     NamedArg(NamedArg),
 }
 
@@ -93,14 +122,14 @@ impl FileInputEntry {
     fn as_address_def(&self) -> (&CString16, &ValueAddr) {
         match self {
             Self::AddressDef { name, addr } => (name, addr),
-            _ => panic!("Invalid variant used on into_address_def")
+            _ => panic!("Invalid variant used on into_address_def"),
         }
     }
 
     fn as_value_arg(&self) -> &ValueArg {
         match self {
             Self::ValueArg(val_arg) => val_arg,
-            _ => panic!("Invalid variant used on into_value_arg")
+            _ => panic!("Invalid variant used on into_value_arg"),
         }
     }
 }
@@ -121,7 +150,9 @@ where
 }
 
 fn parse_named_arg(arg: &CStr16) -> Result<FileInputEntry, ParseError> {
-    let named_arg = arg.strip_prefix('@'.try_into().unwrap()).ok_or_else(|| ParseError::InvalidValue(arg.to_string()))?;
+    let named_arg = arg
+        .strip_prefix('@'.try_into().unwrap())
+        .ok_or_else(|| ParseError::InvalidValue(arg.to_string()))?;
 
     if named_arg.eq_str_until_nul("reboot") {
         Ok(FileInputEntry::NamedArg(NamedArg::Reboot))
@@ -145,7 +176,10 @@ fn parse_address_def(arg: &CStr16) -> Result<FileInputEntry, ParseError> {
     if let ValueOperation::Read = val_arg.operation {
         Err(ParseError::AddrDefWrite(addr_def.to_string()))
     } else {
-        Ok(FileInputEntry::AddressDef { name: addr_name, addr: val_arg.addr })
+        Ok(FileInputEntry::AddressDef {
+            name: addr_name,
+            addr: val_arg.addr,
+        })
     }
 }
 
@@ -166,5 +200,8 @@ fn parse_address_ref(arg: &CStr16) -> Result<FileInputEntry, ParseError> {
 
     let value_op = crate::args::parse_value_wrapped(&value_str)?;
 
-    Ok(FileInputEntry::AddressRef { name: addr_name.to_owned(), operation: value_op })
+    Ok(FileInputEntry::AddressRef {
+        name:      addr_name.to_owned(),
+        operation: value_op,
+    })
 }

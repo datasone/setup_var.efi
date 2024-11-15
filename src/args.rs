@@ -1,18 +1,17 @@
 use alloc::{
-    borrow::ToOwned,
+    borrow::{Cow, ToOwned},
     format,
     string::{String, ToString},
     vec,
     vec::Vec,
 };
-use alloc::borrow::Cow;
 use core::fmt::{Display, Formatter};
 
 use uefi::{
+    CStr16, CString16, Char16,
     data_types::EqStrUntilNul,
     prelude::BootServices,
     proto::loaded_image::{LoadOptionsError, LoadedImage},
-    CStr16, CString16, Char16,
 };
 use uefi_services::println;
 
@@ -401,7 +400,10 @@ fn parse_value(arg: &CStr16) -> Result<(Cow<CStr16>, ValueOperation), ParseError
         }
         let value = try_parsers!(&arg_split[1], parse_hex_number, parse_number)?;
 
-        Ok((Cow::Owned(arg_split.swap_remove(0)), ValueOperation::Write(value)))
+        Ok((
+            Cow::Owned(arg_split.swap_remove(0)),
+            ValueOperation::Write(value),
+        ))
     } else {
         Ok((Cow::Borrowed(arg), ValueOperation::Read))
     }

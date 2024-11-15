@@ -8,10 +8,10 @@ use alloc::{
 use core::fmt::{Display, Formatter};
 
 use uefi::{
-    data_types::{chars::NUL_16, FromSliceWithNulError},
+    CStr16, CString16, Char16, Status,
+    data_types::{FromSliceWithNulError, chars::NUL_16},
     prelude::RuntimeServices,
     table::runtime::{VariableAttributes, VariableKey, VariableVendor},
-    CStr16, CString16, Char16, Status,
 };
 use uefi_services::{print, println};
 
@@ -278,7 +278,11 @@ impl CStr16Ext for CStr16 {
 
     fn strip_prefix(&self, prefix: Char16) -> Option<&CStr16> {
         if *self.iter().next()? == prefix {
-            let str_ref = unsafe { CStr16::from_u16_with_nul_unchecked(&*(&self.as_slice_with_nul()[1..] as *const [Char16] as *const [u16])) };
+            let str_ref = unsafe {
+                CStr16::from_u16_with_nul_unchecked(
+                    &*(&self.as_slice_with_nul()[1..] as *const [Char16] as *const [u16]),
+                )
+            };
             Some(str_ref)
         } else {
             None

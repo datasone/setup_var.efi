@@ -7,10 +7,11 @@ mod args;
 mod input;
 mod utils;
 
-use args::{ParseError, ValueArg, ValueOperation, HELP_MSG};
+use args::{HELP_MSG, ParseError, ValueArg, ValueOperation};
 use uefi::{prelude::*, table::runtime::ResetType};
 use uefi_services::println;
 use utils::{UEFIValue, WriteStatus};
+
 use crate::input::parse_input;
 
 #[entry]

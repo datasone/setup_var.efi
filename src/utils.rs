@@ -357,13 +357,15 @@ impl CStr16Ext for CStr16 {
         for (i, c) in self.iter().enumerate() {
             if !is_space(c) {
                 start = i;
+                break;
             }
         }
 
         let mut end = self.num_chars() - 1;
         for (i, c) in self.as_slice().iter().rev().enumerate() {
             if !is_space(c) {
-                end = i;
+                end -= i;
+                break;
             }
         }
 

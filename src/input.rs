@@ -174,7 +174,7 @@ fn parse_address_def(arg: &CStr16) -> Result<FileInputEntry, ParseError> {
         .ok_or_else(|| ParseError::InvalidValue(arg.to_string()))?;
     let val_arg = crate::args::parse_value_arg(&addr_def)?;
 
-    if let ValueOperation::Read = val_arg.operation {
+    if let ValueOperation::Write(_) = val_arg.operation {
         Err(ParseError::AddrDefWrite(addr_def.to_string()))
     } else {
         Ok(FileInputEntry::AddressDef {
@@ -189,7 +189,7 @@ fn parse_value_arg_wrapped(arg: &CStr16) -> Result<FileInputEntry, ParseError> {
 }
 
 fn parse_address_ref(arg: &CStr16) -> Result<FileInputEntry, ParseError> {
-    let (addr_name, value_str) = arg
+    let (addr_name, _value_str) = arg
         .split_only_first('='.try_into().unwrap())
         .ok_or_else(|| ParseError::InvalidValue(arg.to_string()))?;
 
@@ -201,7 +201,7 @@ fn parse_address_ref(arg: &CStr16) -> Result<FileInputEntry, ParseError> {
         Err(ParseError::InvalidValue(addr_name.to_string()))?
     };
 
-    let value_op = crate::args::parse_value_wrapped(&value_str)?;
+    let value_op = crate::args::parse_value_wrapped(&arg)?;
 
     Ok(FileInputEntry::AddressRef {
         name:      addr_name.to_owned(),

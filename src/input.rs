@@ -38,10 +38,11 @@ pub fn parse_input(system_table: &mut SystemTable<Boot>) -> Result<Args, ParseEr
             return None;
         }
 
-        if let Some(s) = s.strip_suffix('\r'.try_into().unwrap()) {
-            Some(s)
+        let res = s.strip_suffix('\r'.try_into().unwrap()).unwrap_or(s);
+        if res.is_empty() {
+            None
         } else {
-            Some(s)
+            Some(res)
         }
     });
 
@@ -170,7 +171,7 @@ fn parse_address_def(arg: &CStr16) -> Result<FileInputEntry, ParseError> {
 
     let addr_name = addr_name
         .strip_suffix(':'.try_into().unwrap())
-        .ok_or(ParseError::InvalidValue(arg.to_string()))?;
+        .ok_or_else(|| ParseError::InvalidValue(arg.to_string()))?;
     let val_arg = crate::args::parse_value_arg(&addr_def)?;
 
     if let ValueOperation::Read = val_arg.operation {
@@ -193,7 +194,9 @@ fn parse_address_ref(arg: &CStr16) -> Result<FileInputEntry, ParseError> {
         .ok_or_else(|| ParseError::InvalidValue(arg.to_string()))?;
 
     let addr_name = if addr_name.starts_with('$'.try_into().unwrap()) {
-        addr_name.strip_prefix('$'.try_into().unwrap()).ok_or_else(|| ParseError::InvalidValue(arg.to_string()))?
+        addr_name
+            .strip_prefix('$'.try_into().unwrap())
+            .ok_or_else(|| ParseError::InvalidValue(arg.to_string()))?
     } else {
         Err(ParseError::InvalidValue(addr_name.to_string()))?
     };

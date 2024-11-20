@@ -59,6 +59,8 @@ For changing BIOS settings, you may use those following steps to obtain the vari
 ## Input File
 `setup_var.efi` now supports specifying with a input file (by UEFI shell redirection). All options that can be specified with arguments are available in input file.
 
+Note: The text should be in UTF-16LE encoding, see [pinned issue #25](https://github.com/datasone/setup_var.efi/issues/25) for details.
+
 The input file consists of three parts:
 - Named arguments which are specified with a leading `@`.
 - Defining a value address reference (to make the input file more readable) with `:=`.

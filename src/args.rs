@@ -5,8 +5,6 @@ use alloc::{
 };
 use core::fmt::{Display, Formatter};
 
-use NamedArg::*;
-use ParseError::*;
 use uefi::{
     CStr16, CString16, Char16,
     data_types::EqStrUntilNul,
@@ -17,7 +15,7 @@ use uefi::{
 use crate::utils::cstr16_to_cstring16;
 
 #[derive(Debug)]
-pub(crate) enum ParseError {
+pub enum ParseError {
     LoadedImageProtocolError,
     LoadOptionsError(LoadOptionsError),
     InvalidValue(String),
@@ -30,25 +28,25 @@ pub(crate) enum ParseError {
 impl Display for ParseError {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         match self {
-            LoadedImageProtocolError => {
+            Self::LoadedImageProtocolError => {
                 write!(f, "Error while initializing UEFI LoadedImage protocol")
             }
-            LoadOptionsError(e) => {
+            Self::LoadOptionsError(e) => {
                 write!(f, "Error loading options: {e:?}")
             }
-            InvalidValue(s) => {
+            Self::InvalidValue(s) => {
                 write!(f, "Unexpected value: {s}")
             }
-            NumberTooLarge(s) => {
+            Self::NumberTooLarge(s) => {
                 write!(f, "Specified number {s} is too large (larger than 64-bit)")
             }
-            AppliedMultipleTimes(s) => {
+            Self::AppliedMultipleTimes(s) => {
                 write!(f, "Argument {s} is applied multiple times, once expected")
             }
-            OptionNoValue(s) => {
+            Self::OptionNoValue(s) => {
                 write!(f, "Argument {s} has no value specified")
             }
-            InvalidArgs(e) => {
+            Self::InvalidArgs(e) => {
                 write!(f, "{e}")
             }
         }
@@ -64,7 +62,7 @@ pub(crate) struct Args {
     pub(crate) var_name:        Option<CString16>,
     pub(crate) var_id:          Option<usize>,
     pub(crate) write_on_demand: bool,
-    pub(crate) reboot:          bool,
+    pub(crate) reboot:          RebootMode,
 }
 
 impl Args {
@@ -91,7 +89,7 @@ impl Args {
 }
 
 #[derive(Debug)]
-pub(crate) enum ArgsError {
+pub enum ArgsError {
     MissingOffset,
     ValLargerThanSize(usize, usize),
 }
@@ -127,11 +125,11 @@ enum NamedArg {
     CustomName(CString16),
     VariableId(usize),
     Help,
-    Reboot,
+    Reboot(RebootMode),
     WriteOnDemand,
 }
 
-pub(crate) const HELP_MSG: &str = r#"Usage:
+pub const HELP_MSG: &str = r#"Usage:
 setup_var.efi <OFFSET> [<VALUE>] [-s <VALUE_SIZE>] [-n <VAR_NAME>] [-i <VAR_ID>] [-r/--reboot] [--write_on_demand]
 
 OFFSET: The offset of value to be altered in the UEFI variable.
@@ -217,34 +215,37 @@ fn parse_args_from_str(options: &CStr16) -> Result<Args, ParseError> {
         }
         if starts_with(&option, '-') {
             match parse_named_arg(&option, &mut option_iter)? {
-                Help => {
+                NamedArg::Help => {
                     args.help_msg = true;
                 }
-                Reboot => {
-                    args.reboot = true;
+                NamedArg::Reboot(mode) => {
+                    args.reboot = mode;
+                    if mode == RebootMode::Auto {
+                        args.write_on_demand = true;
+                    }
                 }
-                WriteOnDemand => {
+                NamedArg::WriteOnDemand => {
                     args.write_on_demand = true;
                 }
-                CustomName(name) => {
+                NamedArg::CustomName(name) => {
                     if args.var_name.is_none() {
                         args.var_name = Some(name)
                     } else {
-                        return Err(AppliedMultipleTimes(option.to_string()));
+                        return Err(ParseError::AppliedMultipleTimes(option.to_string()));
                     }
                 }
-                ValueSize(size) => {
+                NamedArg::ValueSize(size) => {
                     if args.val_size.is_none() {
                         args.val_size = Some(size)
                     } else {
-                        return Err(AppliedMultipleTimes(option.to_string()));
+                        return Err(ParseError::AppliedMultipleTimes(option.to_string()));
                     }
                 }
-                VariableId(id) => {
+                NamedArg::VariableId(id) => {
                     if args.var_id.is_none() {
                         args.var_id = Some(id)
                     } else {
-                        return Err(AppliedMultipleTimes(option.to_string()));
+                        return Err(ParseError::AppliedMultipleTimes(option.to_string()));
                     }
                 }
             }
@@ -254,10 +255,10 @@ fn parse_args_from_str(options: &CStr16) -> Result<Args, ParseError> {
             } else if args.value.is_none() {
                 args.value = Some(num)
             } else {
-                return Err(InvalidValue(option.to_string()));
+                return Err(ParseError::InvalidValue(option.to_string()));
             }
         } else {
-            return Err(InvalidValue(option.to_string()));
+            return Err(ParseError::InvalidValue(option.to_string()));
         }
     }
 
@@ -273,7 +274,8 @@ fn starts_with(s: &CStr16, c: char) -> bool {
 }
 
 fn try_next_char(iter: &mut impl Iterator<Item = char>, str: &CStr16) -> Result<char, ParseError> {
-    iter.next().ok_or_else(|| InvalidValue(str.to_string()))
+    iter.next()
+        .ok_or_else(|| ParseError::InvalidValue(str.to_string()))
 }
 
 fn parse_number(num_str: &CStr16) -> Result<usize, ParseError> {
@@ -286,17 +288,17 @@ fn parse_number(num_str: &CStr16) -> Result<usize, ParseError> {
     match (c_h, c2_h) {
         ('0', 'x') => {}
         ('0', 'X') => {}
-        _ => return Err(InvalidValue(num_str.to_string())),
+        _ => return Err(ParseError::InvalidValue(num_str.to_string())),
     }
 
     if num_str.num_bytes() > 2 * (18 + 1) {
-        return Err(NumberTooLarge(num_str.to_string()));
+        return Err(ParseError::NumberTooLarge(num_str.to_string()));
     }
 
     let value = str_iter
         .map(|c| c.to_digit(16).map(|n| n as u8))
         .collect::<Option<Vec<u8>>>()
-        .ok_or_else(|| InvalidValue(num_str.to_string()))?;
+        .ok_or_else(|| ParseError::InvalidValue(num_str.to_string()))?;
     let value_len = value.len();
     let value = value.iter().enumerate().fold(0usize, |acc, (i, &n)| {
         acc + ((n as usize) << (4 * (value_len - i - 1)))
@@ -310,24 +312,24 @@ fn parse_named_arg(
     opts: &mut impl Iterator<Item = CString16>,
 ) -> Result<NamedArg, ParseError> {
     if key.eq_str_until_nul(&"-h") || key.eq_str_until_nul(&"--help") {
-        return Ok(Help);
+        return Ok(NamedArg::Help);
     } else if key.eq_str_until_nul(&"-r") || key.eq_str_until_nul(&"--reboot") {
-        return Ok(Reboot);
+        return Ok(NamedArg::Reboot);
     } else if key.eq_str_until_nul(&"--write_on_demand") {
-        return Ok(WriteOnDemand);
+        return Ok(NamedArg::WriteOnDemand);
     }
 
     let value = opts.next();
-    let value = value.as_ref().ok_or_else(|| OptionNoValue(key.to_string()));
+    let value = value.as_ref().ok_or_else(|| ParseError::OptionNoValue(key.to_string()));
 
     if key.eq_str_until_nul(&"-s") {
-        Ok(ValueSize(parse_number(value?)?))
+        Ok(NamedArg::ValueSize(parse_number(value?)?))
     } else if key.eq_str_until_nul(&"-n") {
-        Ok(CustomName(cstr16_to_cstring16(value?)))
+        Ok(NamedArg::CustomName(cstr16_to_cstring16(value?)))
     } else if key.eq_str_until_nul(&"-i") {
-        Ok(VariableId(parse_number(value?)?))
+        Ok(NamedArg::VariableId(parse_number(value?)?))
     } else {
-        Err(InvalidValue(key.to_string()))
+        Err(ParseError::InvalidValue(key.to_string()))
     }
 }
 
@@ -362,8 +364,8 @@ fn split_cstr16(s: &CStr16, split_char: Char16) -> Vec<CString16> {
 }
 
 #[allow(dead_code)]
-pub(crate) fn test_functions() {
-    println!("Testing parse_number");
+pub fn test_functions() {
+    println!("Testing parse_hex_number");
     println!(
         r#"parse_number("0x1"), should be Ok({}), result is {:?}"#,
         0x1,

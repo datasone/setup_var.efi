@@ -4,6 +4,7 @@
 extern crate alloc;
 
 mod args;
+mod input;
 mod utils;
 
 use uefi::{prelude::*, println, runtime::ResetType};
@@ -83,6 +84,4 @@ fn main() -> Status {
             return Status::INVALID_PARAMETER;
         }
     }
-
-    Status::SUCCESS
 }

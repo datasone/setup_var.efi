@@ -7,7 +7,7 @@ mod args;
 mod input;
 mod utils;
 
-use args::{HELP_MSG, ParseError, ValueArg, ValueOperation};
+use args::{HELP_MSG, ParseError, ValueArg, ValueOperation, RebootMode};
 use uefi::{prelude::*, table::runtime::ResetType};
 use uefi_services::println;
 use utils::{UEFIValue, WriteStatus};
@@ -45,18 +45,20 @@ fn main(_image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
         }
     };
 
+    let mut has_written = false;
     for val_arg in args.value_args {
-        let status = process_arg(&system_table, args.write_on_demand, &val_arg);
+        let (status, written) = process_arg(&system_table, args.write_on_demand, &val_arg);
 
         if status != Status::SUCCESS {
             return status;
         }
+        has_written |= written;
     }
 
-    if args.reboot {
+    if args.reboot == RebootMode::Always || (args.reboot == RebootMode::Auto && has_written) {
         system_table
             .runtime_services()
-            .reset(ResetType::WARM, Status::SUCCESS, None)
+            .reset(ResetType::WARM, Status::SUCCESS, None);
     }
 
     Status::SUCCESS
@@ -66,7 +68,7 @@ fn process_arg(
     system_table: &SystemTable<Boot>,
     write_on_demand: bool,
     val_arg: &ValueArg,
-) -> Status {
+) -> (Status, bool) {
     let var_name = &val_arg.addr.var_name;
     let val_size = val_arg.addr.val_size;
     let offset = val_arg.addr.offset;
@@ -80,10 +82,13 @@ fn process_arg(
                 offset,
                 val_size,
             ) {
-                Ok(value) => println!("{}", val_arg.to_string_with_val(&value)),
+                Ok(value) => {
+                    println!("{}", val_arg.to_string_with_val(&value));
+                    (Status::SUCCESS, false)
+                }
                 Err(e) => {
                     println!("Error reading variable:\n{e}");
-                    return Status::ABORTED;
+                    (Status::ABORTED, false)
                 }
             }
         }
@@ -101,20 +106,18 @@ fn process_arg(
             ) {
                 Err(e) => {
                     println!("Error writing variable:\n{e}");
-                    return Status::ABORTED;
+                    (Status::ABORTED, false)
                 }
                 Ok(status) => {
-                    let skipped_msg = if let WriteStatus::Skipped = status {
-                        " # Writing skipped"
-                    } else {
-                        ""
+                    let (skipped_msg, written) = match status {
+                        WriteStatus::Skipped => (" # Writing skipped", false),
+                        WriteStatus::Normal => ("", true),
                     };
 
                     println!("{}{}", val_arg.to_string_with_val(&value), skipped_msg);
+                    (Status::SUCCESS, written)
                 }
             }
         }
     }
-
-    Status::SUCCESS
 }

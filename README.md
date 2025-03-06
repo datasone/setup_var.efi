@@ -17,9 +17,10 @@ The legacy names used in grub version of the tool and some other related tools (
 ## Usage
 Run `setup_var.efi -h` in UEFI shell to get this help:
 ```
-setup_var.efi [-h/--help] [-r/--reboot] [--write_on_demand] VALUE_ARG...
+setup_var.efi [-h/--help] [-r/--reboot(=auto)] [--write_on_demand] VALUE_ARG...
 
 -r or --reboot: Reboot (warm reset) the computer after the program successfully finishes.
+--reboot=auto: Reboot only if any value was actually written. This option automatically enables --write_on_demand.
 --write_on_demand: If the value desired to be written is the same with storage, skip the unnecessary write.
 
 VALUE_ARG represents the value needs to be read/written, and can be specified multiple times.

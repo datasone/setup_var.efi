@@ -54,15 +54,15 @@ impl Display for ParseError {
 }
 
 #[derive(Debug, Default)]
-pub(crate) struct Args {
-    pub(crate) help_msg:        bool,
-    pub(crate) offset:          Option<usize>,
-    pub(crate) value:           Option<usize>,
-    pub(crate) val_size:        Option<usize>,
-    pub(crate) var_name:        Option<CString16>,
-    pub(crate) var_id:          Option<usize>,
-    pub(crate) write_on_demand: bool,
-    pub(crate) reboot:          RebootMode,
+pub struct Args {
+    pub help_msg:        bool,
+    pub offset:          Option<usize>,
+    pub value:           Option<usize>,
+    pub val_size:        Option<usize>,
+    pub var_name:        Option<CString16>,
+    pub var_id:          Option<usize>,
+    pub write_on_demand: bool,
+    pub reboot:          RebootMode,
 }
 
 impl Args {
@@ -147,7 +147,7 @@ though it's recommended to only operate on one byte if you are not sure what thi
 
 Example: .\setup_var.efi 0x10E 0x1a -n CpuSetup"#;
 
-pub(crate) fn parse_args() -> Result<Args, ParseError> {
+pub fn parse_args() -> Result<Args, ParseError> {
     let loaded_image =
         uefi::boot::open_protocol_exclusive::<LoadedImage>(uefi::boot::image_handle())
             .map_err(|_| ParseError::LoadedImageProtocolError)?;
@@ -219,8 +219,8 @@ fn parse_args_from_str(options: &CStr16) -> Result<Args, ParseError> {
                     args.help_msg = true;
                 }
                 NamedArg::Reboot(mode) => {
-                    args.reboot = mode;
-                    if mode == RebootMode::Auto {
+                    args.reboot = *mode;
+                    if *mode == RebootMode::Auto {
                         args.write_on_demand = true;
                     }
                 }
@@ -313,8 +313,10 @@ fn parse_named_arg(
 ) -> Result<NamedArg, ParseError> {
     if key.eq_str_until_nul(&"-h") || key.eq_str_until_nul(&"--help") {
         return Ok(NamedArg::Help);
+    } else if key.eq_str_until_nul(&"-r=auto") || key.eq_str_until_nul(&"--reboot=auto") {
+        Ok(Arg::Named(NamedArg::Reboot(RebootMode::Auto)))
     } else if key.eq_str_until_nul(&"-r") || key.eq_str_until_nul(&"--reboot") {
-        return Ok(NamedArg::Reboot);
+        Ok(Arg::Named(NamedArg::Reboot(RebootMode::Always)))
     } else if key.eq_str_until_nul(&"--write_on_demand") {
         return Ok(NamedArg::WriteOnDemand);
     }

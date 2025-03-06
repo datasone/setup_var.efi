@@ -4,13 +4,12 @@
 extern crate alloc;
 
 mod args;
-mod input;
 mod utils;
 
 use uefi::{prelude::*, println, runtime::ResetType};
 use utils::WriteStatus;
 
-use crate::args::HELP_MSG;
+use crate::args::{HELP_MSG, RebootMode};
 
 #[entry]
 fn main() -> Status {
@@ -26,6 +25,7 @@ fn main() -> Status {
             let val_size = args.val_size.unwrap_or(1);
             let offset = args.offset.unwrap(); // It's checked in args::parse_args
 
+            let mut written = false;
             if let Some(value) = args.value {
                 match utils::write_val(
                     &var_name,
@@ -40,6 +40,7 @@ fn main() -> Status {
                         return Status::ABORTED;
                     }
                     Ok(WriteStatus::Normal) => {
+                        written = true;
                         println!(
                             "Written value in {var_name} at offset 0x{:X} with 0x{:X} bytes: \
                              0x{:0width$X}",
@@ -75,13 +76,21 @@ fn main() -> Status {
                 }
             }
 
-            if args.reboot {
-                runtime::reset(ResetType::WARM, Status::SUCCESS, None)
+            match args.reboot {
+                RebootMode::Never => {}
+                RebootMode::Always => runtime::reset(ResetType::WARM, Status::SUCCESS, None),
+                RebootMode::Auto => {
+                    if written {
+                        runtime::reset(ResetType::WARM, Status::SUCCESS, None)
+                    }
+                }
             }
+
+            Status::SUCCESS
         }
         Err(e) => {
             println!("Error parsing arguments:\n{e}");
-            return Status::INVALID_PARAMETER;
+            Status::INVALID_PARAMETER
         }
     }
 }

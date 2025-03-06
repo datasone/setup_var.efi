@@ -119,6 +119,19 @@ impl From<ArgsError> for ParseError {
     }
 }
 
+#[derive(Debug, PartialEq, Copy, Clone)]
+pub enum RebootMode {
+    Never,
+    Always,
+    Auto,
+}
+
+impl Default for RebootMode {
+    fn default() -> Self {
+        Self::Never
+    }
+}
+
 #[derive(Debug)]
 enum NamedArg {
     ValueSize(usize),
@@ -219,8 +232,8 @@ fn parse_args_from_str(options: &CStr16) -> Result<Args, ParseError> {
                     args.help_msg = true;
                 }
                 NamedArg::Reboot(mode) => {
-                    args.reboot = *mode;
-                    if *mode == RebootMode::Auto {
+                    args.reboot = mode;
+                    if mode == RebootMode::Auto {
                         args.write_on_demand = true;
                     }
                 }
@@ -314,15 +327,17 @@ fn parse_named_arg(
     if key.eq_str_until_nul(&"-h") || key.eq_str_until_nul(&"--help") {
         return Ok(NamedArg::Help);
     } else if key.eq_str_until_nul(&"-r=auto") || key.eq_str_until_nul(&"--reboot=auto") {
-        Ok(Arg::Named(NamedArg::Reboot(RebootMode::Auto)))
+        return Ok(NamedArg::Reboot(RebootMode::Auto));
     } else if key.eq_str_until_nul(&"-r") || key.eq_str_until_nul(&"--reboot") {
-        Ok(Arg::Named(NamedArg::Reboot(RebootMode::Always)))
+        return Ok(NamedArg::Reboot(RebootMode::Always));
     } else if key.eq_str_until_nul(&"--write_on_demand") {
         return Ok(NamedArg::WriteOnDemand);
     }
 
     let value = opts.next();
-    let value = value.as_ref().ok_or_else(|| ParseError::OptionNoValue(key.to_string()));
+    let value = value
+        .as_ref()
+        .ok_or_else(|| ParseError::OptionNoValue(key.to_string()));
 
     if key.eq_str_until_nul(&"-s") {
         Ok(NamedArg::ValueSize(parse_number(value?)?))
@@ -415,7 +430,7 @@ pub fn test_functions() {
     );
     println!(
         r#"parse_named_arg("-r", None), should be Ok({:?}), result is {:?}"#,
-        NamedArg::Reboot,
+        NamedArg::Reboot(RebootMode::Always),
         parse_named_arg(
             &CString16::try_from("-r").unwrap(),
             &mut core::iter::empty::<CString16>()
@@ -423,7 +438,7 @@ pub fn test_functions() {
     );
     println!(
         r#"parse_named_arg("--reboot", None), should be Ok({:?}), result is {:?}"#,
-        NamedArg::Reboot,
+        NamedArg::Reboot(RebootMode::Always),
         parse_named_arg(
             &CString16::try_from("--reboot").unwrap(),
             &mut core::iter::empty::<CString16>()

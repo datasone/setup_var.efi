@@ -97,7 +97,7 @@ pub fn parse_input() -> Result<Args, ParseError> {
     let reboot_entry = entries
         .iter()
         .filter(|e| matches!(e, FileInputEntry::NamedArg(NamedArg::Reboot(_))))
-        .last();
+        .next_back();
     let reboot = match reboot_entry {
         Some(FileInputEntry::NamedArg(NamedArg::Reboot(mode))) => *mode,
         _ => RebootMode::Never,
@@ -164,12 +164,12 @@ fn parse_named_arg(arg: &CStr16) -> Result<FileInputEntry, ParseError> {
         .strip_prefix('@'.try_into().unwrap())
         .ok_or_else(|| ParseError::InvalidValue(arg.to_string()))?;
 
-    if named_arg.eq_str_until_nul("reboot") {
+    if named_arg.eq_str_until_nul("reboot=auto") {
+        Ok(FileInputEntry::NamedArg(NamedArg::Reboot(RebootMode::Auto)))
+    } else if named_arg.eq_str_until_nul("reboot") {
         Ok(FileInputEntry::NamedArg(NamedArg::Reboot(
             RebootMode::Always,
         )))
-    } else if named_arg.eq_str_until_nul("reboot=auto") {
-        Ok(FileInputEntry::NamedArg(NamedArg::Reboot(RebootMode::Auto)))
     } else if named_arg.eq_str_until_nul("write_on_demand") {
         Ok(FileInputEntry::NamedArg(NamedArg::WriteOnDemand))
     } else {

@@ -395,10 +395,10 @@ fn parse_number(num_str: &CStr16) -> Result<usize, ParseError> {
 fn parse_named_arg(key: &CStr16) -> Result<Arg, ParseError> {
     if key.eq_str_until_nul(&"-h") || key.eq_str_until_nul(&"--help") {
         Ok(Arg::Named(NamedArg::Help))
-    } else if key.eq_str_until_nul(&"-r") || key.eq_str_until_nul(&"--reboot") {
-        Ok(Arg::Named(NamedArg::Reboot(RebootMode::Always)))
     } else if key.eq_str_until_nul(&"-r=auto") || key.eq_str_until_nul(&"--reboot=auto") {
         Ok(Arg::Named(NamedArg::Reboot(RebootMode::Auto)))
+    } else if key.eq_str_until_nul(&"-r") || key.eq_str_until_nul(&"--reboot") {
+        Ok(Arg::Named(NamedArg::Reboot(RebootMode::Always)))
     } else if key.eq_str_until_nul(&"--write_on_demand") {
         Ok(Arg::Named(NamedArg::WriteOnDemand))
     } else {

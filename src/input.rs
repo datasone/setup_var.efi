@@ -33,7 +33,9 @@ pub fn parse_input(system_table: &mut SystemTable<Boot>) -> Result<Args, ParseEr
     if content.is_empty() {
         return Err(ParseError::NoInput);
     }
-    let content = content.strip_prefix('\u{feff}'.try_into().unwrap()).unwrap_or(&content);
+    let content = content
+        .strip_prefix('\u{feff}'.try_into().unwrap())
+        .unwrap_or(&content);
 
     let lines = content.split_to_cstring('\n'.try_into().unwrap());
     let lines = lines.into_iter().filter_map(|s| {
@@ -43,11 +45,7 @@ pub fn parse_input(system_table: &mut SystemTable<Boot>) -> Result<Args, ParseEr
         }
 
         let res = s.strip_suffix('\r'.try_into().unwrap()).unwrap_or(s);
-        if res.is_empty() {
-            None
-        } else {
-            Some(res)
-        }
+        if res.is_empty() { None } else { Some(res) }
     });
 
     let entries = lines
@@ -205,7 +203,7 @@ fn parse_address_ref(arg: &CStr16) -> Result<FileInputEntry, ParseError> {
         Err(ParseError::InvalidValue(addr_name.to_string()))?
     };
 
-    let value_op = crate::args::parse_value_wrapped(&arg)?;
+    let value_op = crate::args::parse_value_wrapped(arg)?;
 
     Ok(FileInputEntry::AddressRef {
         name:      addr_name.to_owned(),

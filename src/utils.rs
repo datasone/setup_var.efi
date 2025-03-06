@@ -7,6 +7,8 @@ use alloc::{
 };
 use core::fmt::{Display, Formatter};
 
+use num_enum::TryFromPrimitive;
+use strum::EnumMessage;
 use uefi::{
     CStr16, CString16, Char16, Status,
     data_types::{FromSliceWithNulError, chars::NUL_16},
@@ -15,22 +17,133 @@ use uefi::{
 };
 use uefi_services::{print, println};
 
+#[allow(non_camel_case_types, clippy::upper_case_acronyms)]
+#[derive(TryFromPrimitive, EnumMessage, strum::Display)]
+#[repr(u8)]
+pub enum UEFIStatusErrorCode {
+    /// The image failed to load.
+    LOAD_ERROR           = 1,
+    /// A parameter was incorrect.
+    INVALID_PARAMETER    = 2,
+    /// The operation is not supported.
+    UNSUPPORTED          = 3,
+    /// The buffer was not the proper size for the request.
+    BAD_BUFFER_SIZE      = 4,
+    /// The buffer is not large enough to hold the requested data.
+    /// The required buffer size is returned in the appropriate parameter.
+    BUFFER_TOO_SMALL     = 5,
+    /// There is no data pending upon return.
+    NOT_READY            = 6,
+    /// The physical device reported an error while attempting the operation.
+    DEVICE_ERROR         = 7,
+    /// The device cannot be written to.
+    WRITE_PROTECTED      = 8,
+    /// A resource has run out.
+    OUT_OF_RESOURCES     = 9,
+    /// An inconstency was detected on the file system.
+    VOLUME_CORRUPTED     = 10,
+    /// There is no more space on the file system.
+    VOLUME_FULL          = 11,
+    /// The device does not contain any medium to perform the operation.
+    NO_MEDIA             = 12,
+    /// The medium in the device has changed since the last access.
+    MEDIA_CHANGED        = 13,
+    /// The item was not found.
+    NOT_FOUND            = 14,
+    /// Access was denied.
+    ACCESS_DENIED        = 15,
+    /// The server was not found or did not respond to the request.
+    NO_RESPONSE          = 16,
+    /// A mapping to a device does not exist.
+    NO_MAPPING           = 17,
+    /// The timeout time expired.
+    TIMEOUT              = 18,
+    /// The protocol has not been started.
+    NOT_STARTED          = 19,
+    /// The protocol has already been started.
+    ALREADY_STARTED      = 20,
+    /// The operation was aborted.
+    ABORTED              = 21,
+    /// An ICMP error occurred during the network operation.
+    ICMP_ERROR           = 22,
+    /// A TFTP error occurred during the network operation.
+    TFTP_ERROR           = 23,
+    /// A protocol error occurred during the network operation.
+    PROTOCOL_ERROR       = 24,
+    /// The function encountered an internal version that was
+    /// incompatible with a version requested by the caller.
+    INCOMPATIBLE_VERSION = 25,
+    /// The function was not performed due to a security violation.
+    SECURITY_VIOLATION   = 26,
+    /// A CRC error was detected.
+    CRC_ERROR            = 27,
+    /// Beginning or end of media was reached
+    END_OF_MEDIA         = 28,
+    /// The end of the file was reached.
+    END_OF_FILE          = 31,
+    /// The language specified was invalid.
+    INVALID_LANGUAGE     = 32,
+    /// The security status of the data is unknown or compromised and
+    /// the data must be updated or replaced to restore a valid security status.
+    COMPROMISED_DATA     = 33,
+    /// There is an address conflict address allocation
+    IP_ADDRESS_CONFLICT  = 34,
+    /// A HTTP error occurred during the network operation.
+    HTTP_ERROR           = 35,
+}
+
+pub enum UEFIStatusError {
+    Success,
+    Error(UEFIStatusErrorCode),
+    UnknownError(usize),
+}
+
+impl From<Status> for UEFIStatusError {
+    fn from(value: Status) -> Self {
+        if !value.is_error() {
+            Self::Success
+        } else {
+            match UEFIStatusErrorCode::try_from(value.0 as u8) {
+                Ok(error_code) => UEFIStatusError::Error(error_code),
+                Err(_) => UEFIStatusError::UnknownError(value.0),
+            }
+        }
+    }
+}
+
+impl Display for UEFIStatusError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        match self {
+            UEFIStatusError::Success => write!(f, "Success"),
+            UEFIStatusError::Error(error_code) => {
+                write!(
+                    f,
+                    "{} ({})",
+                    error_code,
+                    error_code.get_documentation().unwrap_or_default()
+                )
+            }
+            UEFIStatusError::UnknownError(code) => write!(f, "Unknown error with code {}", code),
+        }
+    }
+}
+
 pub enum UEFIVarError {
-    EnumVars(Status),
+    EnumVars(UEFIStatusError),
     NoCorrespondingVar,
     MultipleVarNoId,
     InvalidVarName(FromSliceWithNulError),
-    GetVariableSize(String, Status),
-    GetVariable(String, Status),
+    GetVariableSize(String, UEFIStatusError),
+    GetVariable(String, UEFIStatusError),
     OffsetOverflow((usize, usize), usize), // ((offset, val_size), var_size)
-    SetVariable(String, Status),
+    SetVariable(String, UEFIStatusError),
 }
 
 impl Display for UEFIVarError {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         match self {
             Self::EnumVars(st) => {
-                write!(f, "Error while enumerating UEFI variables with code {st:?}")
+                write!(f, "Error while enumerating UEFI variables: {st}")
             }
             Self::NoCorrespondingVar => {
                 write!(f, "No variable with specified name found")
@@ -45,16 +158,10 @@ impl Display for UEFIVarError {
                 write!(f, "Unexpected invalid UEFI variable name obtained: {e:?}")
             }
             Self::GetVariableSize(s, st) => {
-                write!(
-                    f,
-                    "Error while getting size of variable {s} with code {st:?}"
-                )
+                write!(f, "Error while getting size of variable {s}: {st}")
             }
             Self::GetVariable(s, st) => {
-                write!(
-                    f,
-                    "Error while getting content of variable {s} with code {st:?}",
-                )
+                write!(f, "Error while getting content of variable {s}: {st}",)
             }
             Self::OffsetOverflow((offset, val_size), size) => {
                 write!(
@@ -64,10 +171,7 @@ impl Display for UEFIVarError {
                 )
             }
             Self::SetVariable(s, st) => {
-                write!(
-                    f,
-                    "Error while setting content of variable {s} with code {st:?}"
-                )
+                write!(f, "Error while setting content of variable {s}: {st}")
             }
         }
     }
@@ -165,7 +269,7 @@ pub fn write_val(
 
         runtime_services
             .set_variable(&var.name, &var.vendor, var.attributes, &var.content)
-            .map_err(|e| UEFIVarError::SetVariable(var.name.to_string(), e.status()))?;
+            .map_err(|e| UEFIVarError::SetVariable(var.name.to_string(), e.status().into()))?;
 
         Ok(WriteStatus::Normal)
     }
@@ -178,7 +282,7 @@ fn read_var(
 ) -> Result<UEFIVariable, UEFIVarError> {
     let keys = runtime_services
         .variable_keys()
-        .map_err(|e| UEFIVarError::EnumVars(e.status()))?;
+        .map_err(|e| UEFIVarError::EnumVars(e.status().into()))?;
     let mut keys = keys
         .into_iter()
         .filter(|k| {
@@ -209,11 +313,11 @@ fn read_var(
 
     let size = runtime_services
         .get_variable_size(var_name, &var_key.vendor)
-        .map_err(|e| UEFIVarError::GetVariableSize(var_name.to_string(), e.status()))?;
+        .map_err(|e| UEFIVarError::GetVariableSize(var_name.to_string(), e.status().into()))?;
     let mut buf = vec![0; size];
     let (_, var_attr) = runtime_services
         .get_variable(var_name, &var_key.vendor, &mut buf)
-        .map_err(|e| UEFIVarError::GetVariable(var_name.to_string(), e.status()))?;
+        .map_err(|e| UEFIVarError::GetVariable(var_name.to_string(), e.status().into()))?;
 
     Ok(UEFIVariable {
         name:       var_name.to_owned(),
@@ -236,7 +340,7 @@ fn print_keys(
         let name = key.name()?;
         let size = runtime_services
             .get_variable_size(name, &key.vendor)
-            .map_err(|e| UEFIVarError::GetVariableSize(name.to_string(), e.status()))?;
+            .map_err(|e| UEFIVarError::GetVariableSize(name.to_string(), e.status().into()))?;
         print!("0x{:X}\t", id);
         print!("{name}");
         match (name.num_bytes() / 2 - 1) / 8 {

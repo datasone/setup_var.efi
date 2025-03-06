@@ -120,7 +120,7 @@ impl ValueArg {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Copy, Clone)]
 pub enum RebootMode {
     Never,
     Always,
@@ -192,7 +192,7 @@ impl From<ArgsError> for ParseError {
 }
 
 pub const HELP_MSG: &str = r#"Usage:
-setup_var.efi [-h/--help] [-r/--reboot] [--reboot=auto] [--write_on_demand] VALUE_ARG...
+setup_var.efi [-h/--help] [-r/--reboot(=auto)] [--write_on_demand] VALUE_ARG...
 
 -r or --reboot: Reboot (warm reset) the computer after the program successfully finishes.
 --reboot=auto: Reboot only if any value was actually written. This option automatically enables --write_on_demand.
@@ -324,8 +324,8 @@ fn parse_args_from_str(options: &CStr16) -> Result<Args, ParseError> {
         match named_arg {
             NamedArg::Help => args.help_msg = true,
             NamedArg::Reboot(mode) => {
-                args.reboot = mode;
-                if mode == RebootMode::Auto {
+                args.reboot = *mode;
+                if *mode == RebootMode::Auto {
                     args.write_on_demand = true;
                 }
             }
@@ -398,6 +398,8 @@ fn parse_named_arg(key: &CStr16) -> Result<Arg, ParseError> {
         Ok(Arg::Named(NamedArg::Help))
     } else if key.eq_str_until_nul(&"-r") || key.eq_str_until_nul(&"--reboot") {
         Ok(Arg::Named(NamedArg::Reboot(RebootMode::Always)))
+    } else if key.eq_str_until_nul(&"-r=auto") || key.eq_str_until_nul(&"--reboot=auto") {
+        Ok(Arg::Named(NamedArg::Reboot(RebootMode::Auto)))
     } else if key.eq_str_until_nul(&"--write_on_demand") {
         Ok(Arg::Named(NamedArg::WriteOnDemand))
     } else {
@@ -675,10 +677,10 @@ pub fn test_functions() {
     println!(
         r#"parse_args_from_str(".\setup_var.efi --reboot=auto VAR:0x12=0x12"), should be Ok({:?}), result is {:?}"#,
         Args {
-            help_msg: false,
-            write_on_demand: true,  // auto reboot enables write_on_demand
-            reboot: RebootMode::Auto,
-            value_args: vec![ValueArg {
+            help_msg:        false,
+            write_on_demand: true, // auto reboot enables write_on_demand
+            reboot:          RebootMode::Auto,
+            value_args:      vec![ValueArg {
                 addr:      ValueAddr {
                     var_name: CString16::try_from("VAR").unwrap(),
                     var_id:   None,

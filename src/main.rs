@@ -7,7 +7,7 @@ mod args;
 mod input;
 mod utils;
 
-use args::{HELP_MSG, ParseError, ValueArg, ValueOperation, RebootMode};
+use args::{HELP_MSG, ParseError, RebootMode, ValueArg, ValueOperation};
 use uefi::{prelude::*, table::runtime::ResetType};
 use uefi_services::println;
 use utils::{UEFIValue, WriteStatus};
@@ -45,17 +45,18 @@ fn main(_image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
         }
     };
 
-    let mut has_written = false;
+    let mut arg_process_state = ArgProcessState::default();
     for val_arg in args.value_args {
-        let (status, written) = process_arg(&system_table, args.write_on_demand, &val_arg);
+        let (status, state) = process_arg(&system_table, args.write_on_demand, &val_arg);
 
         if status != Status::SUCCESS {
             return status;
         }
-        has_written |= written;
+        arg_process_state.bind(&state);
     }
 
-    if args.reboot == RebootMode::Always || (args.reboot == RebootMode::Auto && has_written) {
+    let reboot_required = matches!(arg_process_state.write_status, WriteStatus::Normal);
+    if args.reboot == RebootMode::Always || (args.reboot == RebootMode::Auto && reboot_required) {
         system_table
             .runtime_services()
             .reset(ResetType::WARM, Status::SUCCESS, None);
@@ -64,11 +65,37 @@ fn main(_image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
     Status::SUCCESS
 }
 
+struct ArgProcessState {
+    write_status: WriteStatus,
+}
+
+impl ArgProcessState {
+    fn bind(&mut self, other: &Self) {
+        if let WriteStatus::Skipped = self.write_status {
+            if let WriteStatus::Normal = other.write_status {
+                self.write_status = WriteStatus::Normal;
+            }
+        }
+    }
+
+    fn nothing_written() -> Self {
+        Self {
+            write_status: WriteStatus::Skipped,
+        }
+    }
+}
+
+impl Default for ArgProcessState {
+    fn default() -> Self {
+        Self::nothing_written()
+    }
+}
+
 fn process_arg(
     system_table: &SystemTable<Boot>,
     write_on_demand: bool,
     val_arg: &ValueArg,
-) -> (Status, bool) {
+) -> (Status, ArgProcessState) {
     let var_name = &val_arg.addr.var_name;
     let val_size = val_arg.addr.val_size;
     let offset = val_arg.addr.offset;
@@ -84,11 +111,11 @@ fn process_arg(
             ) {
                 Ok(value) => {
                     println!("{}", val_arg.to_string_with_val(&value));
-                    (Status::SUCCESS, false)
+                    (Status::SUCCESS, ArgProcessState::nothing_written())
                 }
                 Err(e) => {
                     println!("Error reading variable:\n{e}");
-                    (Status::ABORTED, false)
+                    (Status::ABORTED, ArgProcessState::nothing_written())
                 }
             }
         }
@@ -106,16 +133,16 @@ fn process_arg(
             ) {
                 Err(e) => {
                     println!("Error writing variable:\n{e}");
-                    (Status::ABORTED, false)
+                    (Status::ABORTED, ArgProcessState::nothing_written())
                 }
-                Ok(status) => {
-                    let (skipped_msg, written) = match status {
-                        WriteStatus::Skipped => (" # Writing skipped", false),
-                        WriteStatus::Normal => ("", true),
+                Ok(write_status) => {
+                    let skipped_msg = match write_status {
+                        WriteStatus::Skipped => " # Writing skipped",
+                        WriteStatus::Normal => "",
                     };
 
                     println!("{}{}", val_arg.to_string_with_val(&value), skipped_msg);
-                    (Status::SUCCESS, written)
+                    (Status::SUCCESS, ArgProcessState { write_status })
                 }
             }
         }

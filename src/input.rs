@@ -12,7 +12,7 @@ use uefi::{
 };
 
 use crate::{
-    args::{Args, NamedArg, ParseError, ValueAddr, ValueArg, ValueOperation},
+    args::{Args, NamedArg, ParseError, RebootMode, ValueAddr, ValueArg, ValueOperation},
     utils::CStr16Ext,
 };
 
@@ -33,7 +33,9 @@ pub fn parse_input(system_table: &mut SystemTable<Boot>) -> Result<Args, ParseEr
     if content.is_empty() {
         return Err(ParseError::NoInput);
     }
-    let content = content.strip_prefix('\u{feff}'.try_into().unwrap()).unwrap_or(&content);
+    let content = content
+        .strip_prefix('\u{feff}'.try_into().unwrap())
+        .unwrap_or(&content);
 
     let lines = content.split_to_cstring('\n'.try_into().unwrap());
     let lines = lines.into_iter().filter_map(|s| {
@@ -43,11 +45,7 @@ pub fn parse_input(system_table: &mut SystemTable<Boot>) -> Result<Args, ParseEr
         }
 
         let res = s.strip_suffix('\r'.try_into().unwrap()).unwrap_or(s);
-        if res.is_empty() {
-            None
-        } else {
-            Some(res)
-        }
+        if res.is_empty() { None } else { Some(res) }
     });
 
     let entries = lines
@@ -95,9 +93,16 @@ pub fn parse_input(system_table: &mut SystemTable<Boot>) -> Result<Args, ParseEr
 
     val_args.append(&mut address_ref_args);
 
-    let reboot = entries
+    // Here we choose to let the last occurred setting override previous ones
+    let reboot_entry = entries
         .iter()
-        .any(|e| matches!(e, FileInputEntry::NamedArg(NamedArg::Reboot)));
+        .filter(|e| matches!(e, FileInputEntry::NamedArg(NamedArg::Reboot(_))))
+        .last();
+    let reboot = match reboot_entry {
+        Some(FileInputEntry::NamedArg(NamedArg::Reboot(mode))) => *mode,
+        _ => RebootMode::Never,
+    };
+
     let write_on_demand = entries
         .iter()
         .any(|e| matches!(e, FileInputEntry::NamedArg(NamedArg::WriteOnDemand)));
@@ -160,7 +165,11 @@ fn parse_named_arg(arg: &CStr16) -> Result<FileInputEntry, ParseError> {
         .ok_or_else(|| ParseError::InvalidValue(arg.to_string()))?;
 
     if named_arg.eq_str_until_nul("reboot") {
-        Ok(FileInputEntry::NamedArg(NamedArg::Reboot))
+        Ok(FileInputEntry::NamedArg(NamedArg::Reboot(
+            RebootMode::Always,
+        )))
+    } else if named_arg.eq_str_until_nul("reboot=auto") {
+        Ok(FileInputEntry::NamedArg(NamedArg::Reboot(RebootMode::Auto)))
     } else if named_arg.eq_str_until_nul("write_on_demand") {
         Ok(FileInputEntry::NamedArg(NamedArg::WriteOnDemand))
     } else {

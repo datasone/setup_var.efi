@@ -119,10 +119,23 @@ impl ValueArg {
     }
 }
 
+#[derive(Debug, PartialEq, Copy, Clone)]
+pub enum RebootMode {
+    Never,
+    Always,
+    Auto,
+}
+
+impl Default for RebootMode {
+    fn default() -> Self {
+        Self::Never
+    }
+}
+
 #[derive(Debug)]
 pub enum NamedArg {
     Help,
-    Reboot,
+    Reboot(RebootMode),
     WriteOnDemand,
 }
 
@@ -137,7 +150,7 @@ pub struct Args {
     pub value_args:      Vec<ValueArg>,
     pub help_msg:        bool,
     pub write_on_demand: bool,
-    pub reboot:          bool,
+    pub reboot:          RebootMode,
 }
 
 impl Args {
@@ -178,9 +191,10 @@ impl From<ArgsError> for ParseError {
 }
 
 pub const HELP_MSG: &str = r#"Usage:
-setup_var.efi [-h/--help] [-r/--reboot] [--write_on_demand] VALUE_ARG...
+setup_var.efi [-h/--help] [-r/--reboot(=auto)] [--write_on_demand] VALUE_ARG...
 
 -r or --reboot: Reboot (warm reset) the computer after the program successfully finishes.
+--reboot=auto: Reboot only if any value was actually written. This option automatically enables --write_on_demand.
 --write_on_demand: If the value desired to be written is the same with storage, skip the unnecessary write.
 
 VALUE_ARG represents the value needs to be read/written, and can be specified multiple times.
@@ -308,7 +322,12 @@ fn parse_args_from_str(options: &CStr16) -> Result<Args, ParseError> {
     for named_arg in named_args {
         match named_arg {
             NamedArg::Help => args.help_msg = true,
-            NamedArg::Reboot => args.reboot = true,
+            NamedArg::Reboot(mode) => {
+                args.reboot = *mode;
+                if *mode == RebootMode::Auto {
+                    args.write_on_demand = true;
+                }
+            }
             NamedArg::WriteOnDemand => args.write_on_demand = true,
         }
     }
@@ -377,7 +396,9 @@ fn parse_named_arg(key: &CStr16) -> Result<Arg, ParseError> {
     if key.eq_str_until_nul(&"-h") || key.eq_str_until_nul(&"--help") {
         Ok(Arg::Named(NamedArg::Help))
     } else if key.eq_str_until_nul(&"-r") || key.eq_str_until_nul(&"--reboot") {
-        Ok(Arg::Named(NamedArg::Reboot))
+        Ok(Arg::Named(NamedArg::Reboot(RebootMode::Always)))
+    } else if key.eq_str_until_nul(&"-r=auto") || key.eq_str_until_nul(&"--reboot=auto") {
+        Ok(Arg::Named(NamedArg::Reboot(RebootMode::Auto)))
     } else if key.eq_str_until_nul(&"--write_on_demand") {
         Ok(Arg::Named(NamedArg::WriteOnDemand))
     } else {
@@ -510,12 +531,12 @@ pub fn test_functions() {
     );
     println!(
         r#"parse_named_arg("-r", None), should be Ok({:?}), result is {:?}"#,
-        NamedArg::Reboot,
+        NamedArg::Reboot(RebootMode::Always),
         parse_named_arg(&CString16::try_from("-r").unwrap())
     );
     println!(
         r#"parse_named_arg("--reboot", None), should be Ok({:?}), result is {:?}"#,
-        NamedArg::Reboot,
+        NamedArg::Reboot(RebootMode::Always),
         parse_named_arg(&CString16::try_from("--reboot").unwrap())
     );
     println!(
@@ -648,6 +669,28 @@ pub fn test_functions() {
         },
         parse_args_from_str(
             &CString16::try_from(".\\setup_var.efi VAR:0x01(3) VAR2(2):0x03=0x05").unwrap()
+        )
+    );
+
+    // Add new test for auto reboot mode
+    println!(
+        r#"parse_args_from_str(".\setup_var.efi --reboot=auto VAR:0x12=0x12"), should be Ok({:?}), result is {:?}"#,
+        Args {
+            help_msg:        false,
+            write_on_demand: true, // auto reboot enables write_on_demand
+            reboot:          RebootMode::Auto,
+            value_args:      vec![ValueArg {
+                addr:      ValueAddr {
+                    var_name: CString16::try_from("VAR").unwrap(),
+                    var_id:   None,
+                    offset:   0x12,
+                    val_size: 1,
+                },
+                operation: ValueOperation::Write(0x12),
+            },],
+        },
+        parse_args_from_str(
+            &CString16::try_from(".\\setup_var.efi --reboot=auto VAR:0x12=0x12").unwrap()
         )
     );
 }

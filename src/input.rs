@@ -12,7 +12,7 @@ use uefi::{
 };
 
 use crate::{
-    args::{Args, NamedArg, ParseError, ValueAddr, ValueArg, ValueOperation},
+    args::{Args, NamedArg, ParseError, RebootMode, ValueAddr, ValueArg, ValueOperation},
     utils::CStr16Ext,
 };
 
@@ -93,9 +93,16 @@ pub fn parse_input() -> Result<Args, ParseError> {
 
     val_args.append(&mut address_ref_args);
 
-    let reboot = entries
+    // Here we choose to let the last occurred setting override previous ones
+    let reboot_entry = entries
         .iter()
-        .any(|e| matches!(e, FileInputEntry::NamedArg(NamedArg::Reboot)));
+        .filter(|e| matches!(e, FileInputEntry::NamedArg(NamedArg::Reboot(_))))
+        .last();
+    let reboot = match reboot_entry {
+        Some(FileInputEntry::NamedArg(NamedArg::Reboot(mode))) => *mode,
+        _ => RebootMode::Never,
+    };
+
     let write_on_demand = entries
         .iter()
         .any(|e| matches!(e, FileInputEntry::NamedArg(NamedArg::WriteOnDemand)));
@@ -158,7 +165,11 @@ fn parse_named_arg(arg: &CStr16) -> Result<FileInputEntry, ParseError> {
         .ok_or_else(|| ParseError::InvalidValue(arg.to_string()))?;
 
     if named_arg.eq_str_until_nul("reboot") {
-        Ok(FileInputEntry::NamedArg(NamedArg::Reboot))
+        Ok(FileInputEntry::NamedArg(NamedArg::Reboot(
+            RebootMode::Always,
+        )))
+    } else if named_arg.eq_str_until_nul("reboot=auto") {
+        Ok(FileInputEntry::NamedArg(NamedArg::Reboot(RebootMode::Auto)))
     } else if named_arg.eq_str_until_nul("write_on_demand") {
         Ok(FileInputEntry::NamedArg(NamedArg::WriteOnDemand))
     } else {

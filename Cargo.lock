@@ -101,7 +101,7 @@ checksum = "eded382c5f5f786b989652c49544c4877d9f015cc22e145a5ea8ea66c2921cd2"
 
 [[package]]
 name = "setup_var"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "num_enum",
  "strum",

@@ -10,12 +10,11 @@ use core::fmt::{Display, Formatter};
 use num_enum::TryFromPrimitive;
 use strum::EnumMessage;
 use uefi::{
-    CStr16, CString16, Char16, Status,
+    CStr16, CString16, Char16, ResultExt, Status,
     data_types::{FromSliceWithNulError, chars::NUL_16},
-    prelude::RuntimeServices,
-    table::runtime::{VariableAttributes, VariableKey, VariableVendor},
+    print, println,
+    runtime::{VariableAttributes, VariableKey, VariableVendor},
 };
-use uefi_services::{print, println};
 
 #[allow(non_camel_case_types, clippy::upper_case_acronyms)]
 #[derive(TryFromPrimitive, EnumMessage, strum::Display)]
@@ -129,7 +128,6 @@ impl Display for UEFIStatusError {
 }
 
 pub enum UEFIVarError {
-    EnumVars(UEFIStatusError),
     NoCorrespondingVar,
     MultipleVarNoId,
     InvalidVarName(FromSliceWithNulError),
@@ -142,9 +140,6 @@ pub enum UEFIVarError {
 impl Display for UEFIVarError {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         match self {
-            Self::EnumVars(st) => {
-                write!(f, "Error while enumerating UEFI variables: {st}")
-            }
             Self::NoCorrespondingVar => {
                 write!(f, "No variable with specified name found")
             }
@@ -220,13 +215,12 @@ impl Display for UEFIValue {
 }
 
 pub fn read_val(
-    runtime_services: &RuntimeServices,
     var_name: &CStr16,
     var_id: Option<usize>,
     offset: usize,
     val_size: usize,
 ) -> Result<UEFIValue, UEFIVarError> {
-    let var = read_var(runtime_services, var_name, var_id)?;
+    let var = read_var(var_name, var_id)?;
     if offset + val_size > var.content.len() {
         return Err(UEFIVarError::OffsetOverflow(
             (offset, val_size),
@@ -244,7 +238,6 @@ pub enum WriteStatus {
 }
 
 pub fn write_val(
-    runtime_services: &RuntimeServices,
     var_name: &CStr16,
     var_id: Option<usize>,
     offset: usize,
@@ -252,7 +245,7 @@ pub fn write_val(
     val_size: usize,
     write_on_demand: bool,
 ) -> Result<WriteStatus, UEFIVarError> {
-    let mut var = read_var(runtime_services, var_name, var_id)?;
+    let mut var = read_var(var_name, var_id)?;
     if offset + val_size > var.content.len() {
         return Err(UEFIVarError::OffsetOverflow(
             (offset, val_size),
@@ -267,31 +260,19 @@ pub fn write_val(
     } else {
         slice.copy_from_slice(&value.0);
 
-        runtime_services
-            .set_variable(&var.name, &var.vendor, var.attributes, &var.content)
+        uefi::runtime::set_variable(&var.name, &var.vendor, var.attributes, &var.content)
             .map_err(|e| UEFIVarError::SetVariable(var.name.to_string(), e.status().into()))?;
 
         Ok(WriteStatus::Normal)
     }
 }
 
-fn read_var(
-    runtime_services: &RuntimeServices,
-    var_name: &CStr16,
-    var_id: Option<usize>,
-) -> Result<UEFIVariable, UEFIVarError> {
-    let keys = runtime_services
-        .variable_keys()
-        .map_err(|e| UEFIVarError::EnumVars(e.status().into()))?;
+fn read_var(var_name: &CStr16, var_id: Option<usize>) -> Result<UEFIVariable, UEFIVarError> {
+    let keys = uefi::runtime::variable_keys();
     let mut keys = keys
         .into_iter()
-        .filter(|k| {
-            if let Ok(name) = k.name() {
-                name == var_name
-            } else {
-                false
-            }
-        })
+        .filter_map(|k| k.ok())
+        .filter(|k| k.name == var_name)
         .collect::<Vec<_>>();
     keys.sort_by_key(|k| k.vendor.0);
 
@@ -300,7 +281,7 @@ fn read_var(
     }
 
     if keys.len() > 1 && var_id.is_none() {
-        print_keys(runtime_services, keys)?;
+        print_keys(keys)?;
         return Err(UEFIVarError::MultipleVarNoId);
     }
 
@@ -309,14 +290,12 @@ fn read_var(
     } else {
         &keys[var_id.unwrap()] // if keys.len() == 1, then branch above; if keys.len() > 1 && var_id is None, then above if
     };
-    let var_name = var_key.name()?;
+    let var_name = &var_key.name;
 
-    let size = runtime_services
-        .get_variable_size(var_name, &var_key.vendor)
+    let size = get_variable_size(var_name, &var_key.vendor)
         .map_err(|e| UEFIVarError::GetVariableSize(var_name.to_string(), e.status().into()))?;
     let mut buf = vec![0; size];
-    let (_, var_attr) = runtime_services
-        .get_variable(var_name, &var_key.vendor, &mut buf)
+    let (_, var_attr) = uefi::runtime::get_variable(var_name, &var_key.vendor, &mut buf)
         .map_err(|e| UEFIVarError::GetVariable(var_name.to_string(), e.status().into()))?;
 
     Ok(UEFIVariable {
@@ -327,19 +306,15 @@ fn read_var(
     })
 }
 
-fn print_keys(
-    runtime_services: &RuntimeServices,
-    keys: Vec<VariableKey>,
-) -> Result<(), UEFIVarError> {
+fn print_keys(keys: Vec<VariableKey>) -> Result<(), UEFIVarError> {
     println!("Multiple variables with same name detected:");
     println!("ID\tVarName\t\t\t\tSize\t");
     println!();
 
     for (i, key) in keys.into_iter().enumerate() {
         let id = i;
-        let name = key.name()?;
-        let size = runtime_services
-            .get_variable_size(name, &key.vendor)
+        let name = &key.name;
+        let size = get_variable_size(name, &key.vendor)
             .map_err(|e| UEFIVarError::GetVariableSize(name.to_string(), e.status().into()))?;
         print!("0x{:X}\t", id);
         print!("{name}");
@@ -361,6 +336,16 @@ fn print_keys(
     }
 
     Ok(())
+}
+
+fn get_variable_size(name: &CStr16, vendor: &VariableVendor) -> uefi::Result<usize> {
+    let res = uefi::runtime::get_variable(name, vendor, &mut []);
+    if res.status() == Status::BUFFER_TOO_SMALL {
+        let err = res.unwrap_err();
+        Ok(err.data().unwrap_or_default())
+    } else {
+        Err(res.discard_errdata().unwrap_err())
+    }
 }
 
 pub trait CStr16Ext {
@@ -455,7 +440,8 @@ impl CStr16Ext for CStr16 {
     }
 
     fn trim(&self) -> CString16 {
-        let is_space = |&c| c == ' '.try_into().unwrap() || c == '\t'.try_into().unwrap();
+        let is_space =
+            |&c| c == Char16::try_from(' ').unwrap() || c == Char16::try_from('\t').unwrap();
 
         let mut start = 0;
         for (i, c) in self.iter().enumerate() {

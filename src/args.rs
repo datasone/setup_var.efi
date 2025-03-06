@@ -10,10 +10,9 @@ use core::fmt::{Display, Formatter};
 use uefi::{
     CStr16, CString16, Char16,
     data_types::EqStrUntilNul,
-    prelude::BootServices,
+    println,
     proto::loaded_image::{LoadOptionsError, LoadedImage},
 };
-use uefi_services::println;
 
 use crate::utils::{CStr16Ext, UEFIValue};
 
@@ -200,10 +199,10 @@ though it's recommended to only operate on one byte if you are not sure what thi
 
 Example: .\setup_var.efi -r CpuSetup:0x10E=0x1A"#;
 
-pub fn parse_args(boot_services: &BootServices) -> Result<Args, ParseError> {
-    let loaded_image = boot_services
-        .open_protocol_exclusive::<LoadedImage>(boot_services.image_handle())
-        .map_err(|_| ParseError::LoadedImageProtocolError)?;
+pub fn parse_args() -> Result<Args, ParseError> {
+    let loaded_image =
+        uefi::boot::open_protocol_exclusive::<LoadedImage>(uefi::boot::image_handle())
+            .map_err(|_| ParseError::LoadedImageProtocolError)?;
 
     let options = loaded_image
         .load_options_as_cstr16()
@@ -323,7 +322,7 @@ fn parse_args_from_str(options: &CStr16) -> Result<Args, ParseError> {
 fn starts_with(s: &CStr16, c: char) -> bool {
     match s.as_slice_with_nul().first() {
         None => false,
-        Some(&c_h) => c_h == c.try_into().unwrap(),
+        Some(&c_h) => c_h == Char16::try_from(c).unwrap(),
     }
 }
 

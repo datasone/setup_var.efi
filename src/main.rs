@@ -8,18 +8,16 @@ mod input;
 mod utils;
 
 use args::{HELP_MSG, ParseError, ValueArg, ValueOperation};
-use uefi::{prelude::*, table::runtime::ResetType};
-use uefi_services::println;
+use uefi::{prelude::*, println, runtime::ResetType};
 use utils::{UEFIValue, WriteStatus};
 
 use crate::input::parse_input;
 
 #[entry]
-fn main(_image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
-    uefi_services::init(&mut system_table)
-        .expect("Unexpected error while initializing UEFI services");
+fn main() -> Status {
+    uefi::helpers::init().expect("Unexpected error while initializing UEFI services");
 
-    let args = match args::parse_args(system_table.boot_services()) {
+    let args = match args::parse_args() {
         Ok(args) => {
             if args.help_msg {
                 println!("{}", HELP_MSG);
@@ -28,7 +26,7 @@ fn main(_image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
 
             args
         }
-        Err(ParseError::NoArgs) => match parse_input(&mut system_table) {
+        Err(ParseError::NoArgs) => match parse_input() {
             Ok(args) => args,
             Err(ParseError::NoInput) => {
                 println!("{}", HELP_MSG);
@@ -46,7 +44,7 @@ fn main(_image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
     };
 
     for val_arg in args.value_args {
-        let status = process_arg(&system_table, args.write_on_demand, &val_arg);
+        let status = process_arg(args.write_on_demand, &val_arg);
 
         if status != Status::SUCCESS {
             return status;
@@ -54,32 +52,20 @@ fn main(_image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
     }
 
     if args.reboot {
-        system_table
-            .runtime_services()
-            .reset(ResetType::WARM, Status::SUCCESS, None)
+        runtime::reset(ResetType::WARM, Status::SUCCESS, None)
     }
 
     Status::SUCCESS
 }
 
-fn process_arg(
-    system_table: &SystemTable<Boot>,
-    write_on_demand: bool,
-    val_arg: &ValueArg,
-) -> Status {
+fn process_arg(write_on_demand: bool, val_arg: &ValueArg) -> Status {
     let var_name = &val_arg.addr.var_name;
     let val_size = val_arg.addr.val_size;
     let offset = val_arg.addr.offset;
 
     match val_arg.operation {
         ValueOperation::Read => {
-            match utils::read_val(
-                system_table.runtime_services(),
-                var_name,
-                val_arg.addr.var_id,
-                offset,
-                val_size,
-            ) {
+            match utils::read_val(var_name, val_arg.addr.var_id, offset, val_size) {
                 Ok(value) => println!("{}", val_arg.to_string_with_val(&value)),
                 Err(e) => {
                     println!("Error reading variable:\n{e}");
@@ -91,7 +77,6 @@ fn process_arg(
             let value = UEFIValue::from_usize(value, val_size);
 
             match utils::write_val(
-                system_table.runtime_services(),
                 var_name,
                 val_arg.addr.var_id,
                 offset,

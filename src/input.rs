@@ -7,8 +7,8 @@ use alloc::{
 use uefi::{
     CStr16, CString16,
     data_types::EqStrUntilNul,
-    prelude::*,
     proto::console::text::{Input, Key},
+    system::with_stdin,
 };
 
 use crate::{
@@ -28,8 +28,8 @@ fn read_to_string(stdin: &mut Input) -> uefi::Result<CString16> {
     Ok(str)
 }
 
-pub fn parse_input(system_table: &mut SystemTable<Boot>) -> Result<Args, ParseError> {
-    let content = read_to_string(system_table.stdin()).map_err(|_| ParseError::LoadStdInError)?;
+pub fn parse_input() -> Result<Args, ParseError> {
+    let content = with_stdin(read_to_string).map_err(|_| ParseError::LoadStdInError)?;
     if content.is_empty() {
         return Err(ParseError::NoInput);
     }

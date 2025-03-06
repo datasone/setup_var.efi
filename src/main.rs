@@ -60,12 +60,7 @@ fn main() -> Status {
                     }
                 }
             } else {
-                match utils::read_val(
-                    &var_name,
-                    args.var_id,
-                    offset,
-                    val_size,
-                ) {
+                match utils::read_val(&var_name, args.var_id, offset, val_size) {
                     Ok(value) => println!(
                         "Read value in {var_name} at offset 0x{:X} with 0x{:X} bytes: {}",
                         offset,
@@ -80,7 +75,7 @@ fn main() -> Status {
             }
 
             if args.reboot {
-                runtime::reset(ResetType::Warm, Status::SUCCESS, None)
+                runtime::reset(ResetType::WARM, Status::SUCCESS, None)
             }
         }
         Err(e) => {

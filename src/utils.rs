@@ -9,7 +9,7 @@ use core::fmt::{Display, Formatter};
 use num_enum::TryFromPrimitive;
 use strum::EnumMessage;
 use uefi::{
-    CStr16, CString16, Status,
+    CStr16, CString16, ResultExt, Status,
     data_types::FromSliceWithNulError,
     print, println,
     runtime::{VariableAttributes, VariableKey, VariableVendor},

@@ -5,15 +5,14 @@ use alloc::{
 };
 use core::fmt::{Display, Formatter};
 
-use uefi::{
-    data_types::EqStrUntilNul,
-    prelude::BootServices,
-    proto::loaded_image::{LoadOptionsError, LoadedImage},
-    CStr16, CString16, Char16,
-};
-use uefi_services::println;
 use NamedArg::*;
 use ParseError::*;
+use uefi::{
+    CStr16, CString16, Char16,
+    data_types::EqStrUntilNul,
+    println,
+    proto::loaded_image::{LoadOptionsError, LoadedImage},
+};
 
 use crate::utils::cstr16_to_cstring16;
 

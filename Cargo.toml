@@ -7,7 +7,6 @@ license = "MIT OR Apache-2.0"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-uefi = { version = "0.17", features = ["alloc", "exts"] }
-uefi-services = "0.14"
+uefi = { version = "0.34.1", features = ["alloc", "global_allocator", "panic_handler"] }
 num_enum = { version = "0.7.3", default-features = false }
 strum = { version = "0.27.1", default-features = false, features = ["derive"] }

@@ -1,24 +1,21 @@
 #![no_main]
 #![no_std]
-#![feature(abi_efiapi)]
 
 extern crate alloc;
 
 mod args;
 mod utils;
 
-use uefi::{prelude::*, table::runtime::ResetType};
-use uefi_services::println;
+use uefi::{prelude::*, println, runtime::ResetType};
 use utils::WriteStatus;
 
 use crate::args::HELP_MSG;
 
 #[entry]
-fn main(_image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
-    uefi_services::init(&mut system_table)
-        .expect("Unexpected error while initializing UEFI services");
+fn main() -> Status {
+    uefi::helpers::init().expect("Unexpected error while initializing UEFI services");
 
-    match args::parse_args(system_table.boot_services()) {
+    match args::parse_args() {
         Ok(args) => {
             if args.help_msg {
                 println!("{}", HELP_MSG);
@@ -30,7 +27,6 @@ fn main(_image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
 
             if let Some(value) = args.value {
                 match utils::write_val(
-                    system_table.runtime_services(),
                     &var_name,
                     args.var_id,
                     offset,
@@ -65,7 +61,6 @@ fn main(_image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
                 }
             } else {
                 match utils::read_val(
-                    system_table.runtime_services(),
                     &var_name,
                     args.var_id,
                     offset,
@@ -85,9 +80,7 @@ fn main(_image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
             }
 
             if args.reboot {
-                system_table
-                    .runtime_services()
-                    .reset(ResetType::Warm, Status::SUCCESS, None)
+                runtime::reset(ResetType::Warm, Status::SUCCESS, None)
             }
         }
         Err(e) => {

@@ -11,84 +11,83 @@ use strum::EnumMessage;
 use uefi::{
     CStr16, CString16, Status,
     data_types::FromSliceWithNulError,
-    prelude::RuntimeServices,
-    table::runtime::{VariableAttributes, VariableKey, VariableVendor},
+    print, println,
+    runtime::{VariableAttributes, VariableKey, VariableVendor},
 };
-use uefi_services::{print, println};
 
 #[allow(non_camel_case_types, clippy::upper_case_acronyms)]
 #[derive(TryFromPrimitive, EnumMessage, strum::Display)]
 #[repr(u8)]
 pub enum UEFIStatusErrorCode {
     /// The image failed to load.
-    LOAD_ERROR = 1,
+    LOAD_ERROR           = 1,
     /// A parameter was incorrect.
-    INVALID_PARAMETER = 2,
+    INVALID_PARAMETER    = 2,
     /// The operation is not supported.
-    UNSUPPORTED = 3,
+    UNSUPPORTED          = 3,
     /// The buffer was not the proper size for the request.
-    BAD_BUFFER_SIZE = 4,
+    BAD_BUFFER_SIZE      = 4,
     /// The buffer is not large enough to hold the requested data.
     /// The required buffer size is returned in the appropriate parameter.
-    BUFFER_TOO_SMALL = 5,
+    BUFFER_TOO_SMALL     = 5,
     /// There is no data pending upon return.
-    NOT_READY = 6,
+    NOT_READY            = 6,
     /// The physical device reported an error while attempting the operation.
-    DEVICE_ERROR = 7,
+    DEVICE_ERROR         = 7,
     /// The device cannot be written to.
-    WRITE_PROTECTED = 8,
+    WRITE_PROTECTED      = 8,
     /// A resource has run out.
-    OUT_OF_RESOURCES = 9,
+    OUT_OF_RESOURCES     = 9,
     /// An inconstency was detected on the file system.
-    VOLUME_CORRUPTED = 10,
+    VOLUME_CORRUPTED     = 10,
     /// There is no more space on the file system.
-    VOLUME_FULL = 11,
+    VOLUME_FULL          = 11,
     /// The device does not contain any medium to perform the operation.
-    NO_MEDIA = 12,
+    NO_MEDIA             = 12,
     /// The medium in the device has changed since the last access.
-    MEDIA_CHANGED = 13,
+    MEDIA_CHANGED        = 13,
     /// The item was not found.
-    NOT_FOUND = 14,
+    NOT_FOUND            = 14,
     /// Access was denied.
-    ACCESS_DENIED = 15,
+    ACCESS_DENIED        = 15,
     /// The server was not found or did not respond to the request.
-    NO_RESPONSE = 16,
+    NO_RESPONSE          = 16,
     /// A mapping to a device does not exist.
-    NO_MAPPING = 17,
+    NO_MAPPING           = 17,
     /// The timeout time expired.
-    TIMEOUT = 18,
+    TIMEOUT              = 18,
     /// The protocol has not been started.
-    NOT_STARTED = 19,
+    NOT_STARTED          = 19,
     /// The protocol has already been started.
-    ALREADY_STARTED = 20,
+    ALREADY_STARTED      = 20,
     /// The operation was aborted.
-    ABORTED = 21,
+    ABORTED              = 21,
     /// An ICMP error occurred during the network operation.
-    ICMP_ERROR = 22,
+    ICMP_ERROR           = 22,
     /// A TFTP error occurred during the network operation.
-    TFTP_ERROR = 23,
+    TFTP_ERROR           = 23,
     /// A protocol error occurred during the network operation.
-    PROTOCOL_ERROR = 24,
+    PROTOCOL_ERROR       = 24,
     /// The function encountered an internal version that was
     /// incompatible with a version requested by the caller.
     INCOMPATIBLE_VERSION = 25,
     /// The function was not performed due to a security violation.
-    SECURITY_VIOLATION = 26,
+    SECURITY_VIOLATION   = 26,
     /// A CRC error was detected.
-    CRC_ERROR = 27,
+    CRC_ERROR            = 27,
     /// Beginning or end of media was reached
-    END_OF_MEDIA = 28,
+    END_OF_MEDIA         = 28,
     /// The end of the file was reached.
-    END_OF_FILE = 31,
+    END_OF_FILE          = 31,
     /// The language specified was invalid.
-    INVALID_LANGUAGE = 32,
+    INVALID_LANGUAGE     = 32,
     /// The security status of the data is unknown or compromised and
     /// the data must be updated or replaced to restore a valid security status.
-    COMPROMISED_DATA = 33,
+    COMPROMISED_DATA     = 33,
     /// There is an address conflict address allocation
-    IP_ADDRESS_CONFLICT = 34,
+    IP_ADDRESS_CONFLICT  = 34,
     /// A HTTP error occurred during the network operation.
-    HTTP_ERROR = 35,
+    HTTP_ERROR           = 35,
 }
 
 pub enum UEFIStatusError {
@@ -127,8 +126,7 @@ impl Display for UEFIStatusError {
     }
 }
 
-pub(crate) enum UEFIVarError {
-    EnumVars(UEFIStatusError),
+pub enum UEFIVarError {
     NoCorrespondingVar,
     MultipleVarNoId,
     InvalidVarName(FromSliceWithNulError),
@@ -141,9 +139,6 @@ pub(crate) enum UEFIVarError {
 impl Display for UEFIVarError {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         match self {
-            Self::EnumVars(st) => {
-                write!(f, "Error while enumerating UEFI variables: {st}")
-            }
             Self::NoCorrespondingVar => {
                 write!(f, "No variable with specified name found")
             }
@@ -160,7 +155,7 @@ impl Display for UEFIVarError {
                 write!(f, "Error while getting size of variable {s}: {st}")
             }
             Self::GetVariable(s, st) => {
-                write!(f, "Error while getting content of variable {s}: {st}", )
+                write!(f, "Error while getting content of variable {s}: {st}")
             }
             Self::OffsetOverflow((offset, val_size), size) => {
                 write!(
@@ -189,15 +184,15 @@ struct UEFIVariable {
     content:    Vec<u8>,
 }
 
-pub(crate) struct UEFIValue(pub Vec<u8>);
+pub struct UEFIValue(pub Vec<u8>);
 
 impl UEFIValue {
-    fn from_usize(value: usize, val_size: usize) -> Self {
+    pub fn from_usize(value: usize, val_size: usize) -> Self {
         let value = value & ((1 << (val_size * 8)) - 1);
         Self(value.to_le_bytes()[0..val_size].to_vec())
     }
 
-    pub(crate) fn to_string_with_size(&self, val_size: usize) -> String {
+    pub fn to_string_with_size(&self, val_size: usize) -> String {
         let mut bytes = [0; 8];
         bytes[0..self.0.len()].copy_from_slice(&self.0);
 
@@ -218,14 +213,13 @@ impl Display for UEFIValue {
     }
 }
 
-pub(crate) fn read_val(
-    runtime_services: &RuntimeServices,
+pub fn read_val(
     var_name: &CStr16,
     var_id: Option<usize>,
     offset: usize,
     val_size: usize,
 ) -> Result<UEFIValue, UEFIVarError> {
-    let var = read_var(runtime_services, var_name, var_id)?;
+    let var = read_var(var_name, var_id)?;
     if offset + val_size > var.content.len() {
         return Err(UEFIVarError::OffsetOverflow(
             (offset, val_size),
@@ -242,8 +236,7 @@ pub enum WriteStatus {
     Skipped,
 }
 
-pub(crate) fn write_val(
-    runtime_services: &RuntimeServices,
+pub fn write_val(
     var_name: &CStr16,
     var_id: Option<usize>,
     offset: usize,
@@ -251,7 +244,7 @@ pub(crate) fn write_val(
     val_size: usize,
     write_on_demand: bool,
 ) -> Result<WriteStatus, UEFIVarError> {
-    let mut var = read_var(runtime_services, var_name, var_id)?;
+    let mut var = read_var(var_name, var_id)?;
     if offset + val_size > var.content.len() {
         return Err(UEFIVarError::OffsetOverflow(
             (offset, val_size),
@@ -267,31 +260,19 @@ pub(crate) fn write_val(
     } else {
         slice.copy_from_slice(&value.0);
 
-        runtime_services
-            .set_variable(&var.name, &var.vendor, var.attributes, &var.content)
+        uefi::runtime::set_variable(&var.name, &var.vendor, var.attributes, &var.content)
             .map_err(|e| UEFIVarError::SetVariable(var.name.to_string(), e.status().into()))?;
 
         Ok(WriteStatus::Normal)
     }
 }
 
-fn read_var(
-    runtime_services: &RuntimeServices,
-    var_name: &CStr16,
-    var_id: Option<usize>,
-) -> Result<UEFIVariable, UEFIVarError> {
-    let keys = runtime_services
-        .variable_keys()
-        .map_err(|e| UEFIVarError::EnumVars(e.status().into()))?;
+fn read_var(var_name: &CStr16, var_id: Option<usize>) -> Result<UEFIVariable, UEFIVarError> {
+    let keys = uefi::runtime::variable_keys();
     let mut keys = keys
         .into_iter()
-        .filter(|k| {
-            if let Ok(name) = k.name() {
-                name == var_name
-            } else {
-                false
-            }
-        })
+        .filter_map(|k| k.ok())
+        .filter(|k| k.name == var_name)
         .collect::<Vec<_>>();
     keys.sort_by_key(|k| k.vendor.0);
 
@@ -300,7 +281,7 @@ fn read_var(
     }
 
     if keys.len() > 1 && var_id.is_none() {
-        print_keys(runtime_services, keys)?;
+        print_keys(keys)?;
         return Err(UEFIVarError::MultipleVarNoId);
     }
 
@@ -309,14 +290,12 @@ fn read_var(
     } else {
         &keys[var_id.unwrap()] // if keys.len() == 1, then branch above; if keys.len() > 1 && var_id is None, then above if
     };
-    let var_name = var_key.name()?;
+    let var_name = &var_key.name;
 
-    let size = runtime_services
-        .get_variable_size(var_name, &var_key.vendor)
+    let size = get_variable_size(var_name, &var_key.vendor)
         .map_err(|e| UEFIVarError::GetVariableSize(var_name.to_string(), e.status().into()))?;
     let mut buf = vec![0; size];
-    let (_, var_attr) = runtime_services
-        .get_variable(var_name, &var_key.vendor, &mut buf)
+    let (_, var_attr) = uefi::runtime::get_variable(var_name, &var_key.vendor, &mut buf)
         .map_err(|e| UEFIVarError::GetVariable(var_name.to_string(), e.status().into()))?;
 
     Ok(UEFIVariable {
@@ -327,19 +306,15 @@ fn read_var(
     })
 }
 
-fn print_keys(
-    runtime_services: &RuntimeServices,
-    keys: Vec<VariableKey>,
-) -> Result<(), UEFIVarError> {
+fn print_keys(keys: Vec<VariableKey>) -> Result<(), UEFIVarError> {
     println!("Multiple variables with same name detected:");
     println!("ID\tVarName\t\t\t\tSize\t");
     println!();
 
     for (i, key) in keys.into_iter().enumerate() {
         let id = i;
-        let name = key.name()?;
-        let size = runtime_services
-            .get_variable_size(name, &key.vendor)
+        let name = &key.name;
+        let size = get_variable_size(name, &key.vendor)
             .map_err(|e| UEFIVarError::GetVariableSize(name.to_string(), e.status().into()))?;
         print!("0x{:X}\t", id);
         print!("{name}");
@@ -361,6 +336,16 @@ fn print_keys(
     }
 
     Ok(())
+}
+
+fn get_variable_size(name: &CStr16, vendor: &VariableVendor) -> uefi::Result<usize> {
+    let res = uefi::runtime::get_variable(name, vendor, &mut []);
+    if res.status() == Status::BUFFER_TOO_SMALL {
+        let err = res.unwrap_err();
+        Ok(err.data().unwrap_or_default())
+    } else {
+        Err(res.discard_errdata().unwrap_err())
+    }
 }
 
 pub(crate) fn cstr16_to_cstring16(s: &CStr16) -> CString16 {

@@ -143,7 +143,7 @@ enum NamedArg {
 }
 
 pub const HELP_MSG: &str = r#"Usage:
-setup_var.efi <OFFSET> [<VALUE>] [-s <VALUE_SIZE>] [-n <VAR_NAME>] [-i <VAR_ID>] [-r/--reboot] [--write_on_demand]
+setup_var.efi <OFFSET> [<VALUE>] [-s <VALUE_SIZE>] [-n <VAR_NAME>] [-i <VAR_ID>] [-r/--reboot(=auto)] [--write_on_demand]
 
 OFFSET: The offset of value to be altered in the UEFI variable.
 VALUE: The new value to write, capped at 64-bit. If not specified, the value at OFFSET will be read and shown.
@@ -151,6 +151,7 @@ VALUE_SIZE: Bytes of value to write, must be equal or larger than the size of <V
 VAR_NAME: The name of UEFI variable to be altered, defaults to "Setup".
 VAR_ID: Unique id for distinguishing variables with same name, which will be provided by setup_var.efi (when required).
 -r or --reboot: Reboot (warm reset) the computer after the program successfully finishes.
+--reboot=auto: Reboot only if any value was actually written. This option automatically enables --write_on_demand.
 --write_on_demand: If the value desired to be written is the same with storage, skip the unnecessary write.
 
 OFFSET, VALUE, VALUE_SIZE and VAR_ID are numbers, and must be specified in hexadecimal with prefix "0x".
